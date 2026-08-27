@@ -11,8 +11,8 @@ build/
 /app/.gradle/
 
 # Local configuration
-local.properties
-*.properties
+/local.properties
+/keystore.properties
 
 # IDE
 .idea/

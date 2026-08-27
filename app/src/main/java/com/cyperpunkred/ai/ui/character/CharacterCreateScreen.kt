@@ -199,16 +199,16 @@ fun StatsAssignmentStep(
         Text("总点数: ${stats.totalPoints}/60")
 
         val statFields = listOf(
-            "INT" to "智力" to stats.intelligence,
-            "REF" to "反应" to stats.reflex,
-            "DEX" to "敏捷" to stats.dexterity,
-            "TECH" to "技术" to stats.technique,
-            "COOL" to "酷" to stats.cool,
-            "ATTR" to "魅力" to stats.attractiveness,
-            "LUCK" to "运气" to stats.luck,
-            "MA" to "移速" to stats.movementAllowance,
-            "BODY" to "体格" to stats.body,
-            "EMP" to "共情" to stats.empathy
+            Triple("INT", "智力", stats.intelligence),
+            Triple("REF", "反应", stats.reflex),
+            Triple("DEX", "敏捷", stats.dexterity),
+            Triple("TECH", "技术", stats.technique),
+            Triple("COOL", "酷", stats.cool),
+            Triple("ATTR", "魅力", stats.attractiveness),
+            Triple("LUCK", "运气", stats.luck),
+            Triple("MA", "移速", stats.movementAllowance),
+            Triple("BODY", "体格", stats.body),
+            Triple("EMP", "共情", stats.empathy)
         )
 
         statFields.forEach { (abbr, name, value) ->

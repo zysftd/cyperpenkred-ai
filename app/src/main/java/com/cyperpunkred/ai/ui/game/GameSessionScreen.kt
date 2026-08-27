@@ -160,7 +160,7 @@ fun GameSessionScreen(
                 },
                 actions = {
                     IconButton(onClick = onCombat) {
-                        Icon(Icons.Default.Fight, contentDescription = "战斗")
+                        Icon(Icons.Default.Build, contentDescription = "战斗")
                     }
                 }
             )

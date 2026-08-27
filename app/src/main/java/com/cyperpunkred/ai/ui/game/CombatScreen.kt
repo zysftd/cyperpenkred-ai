@@ -117,7 +117,7 @@ fun CombatScreen(
                     onClick = { /* TODO: Attack action */ },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.FlashOn, null)
+                    Icon(Icons.Default.Build, null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("攻击")
                 }
@@ -125,7 +125,7 @@ fun CombatScreen(
                     onClick = { /* TODO: Defend action */ },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.Shield, null)
+                    Icon(Icons.Default.Lock, null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("防御")
                 }

@@ -48,7 +48,7 @@ fun QuestScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Default Assignment,
+                        Icons.Default.Info,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -72,7 +72,7 @@ fun QuestScreen(
                             leadingContent = {
                                 Icon(
                                     if (quest.status == "completed") Icons.Default.CheckCircle
-                                    else Icons.Default.RadioButtonUnchecked,
+                                    else Icons.Default.Star,
                                     contentDescription = null
                                 )
                             },
