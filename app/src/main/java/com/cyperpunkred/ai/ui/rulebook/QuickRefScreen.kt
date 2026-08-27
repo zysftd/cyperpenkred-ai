@@ -22,7 +22,7 @@ fun QuickRefScreen() {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
+            PrimaryTabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index,

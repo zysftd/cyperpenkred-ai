@@ -2,6 +2,7 @@ package com.cyperpunkred.ai.ui.navigation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,7 +46,7 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(Screen.Home, "首页", Icons.Default.Home),
-    BottomNavItem(Screen.QuickRef, "速查", Icons.Default.List),
+    BottomNavItem(Screen.QuickRef, "速查", Icons.AutoMirrored.Filled.List),
     BottomNavItem(Screen.CharacterList, "角色", Icons.Default.Person),
     BottomNavItem(Screen.GameSession, "游戏", Icons.Default.PlayArrow),
     BottomNavItem(Screen.Settings, "设置", Icons.Default.Settings)

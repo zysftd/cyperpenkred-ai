@@ -4,13 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.cyperpunkred.ai.domain.engine.DiceEngine
 import com.cyperpunkred.ai.domain.model.Combatant
@@ -54,7 +55,7 @@ fun CombatScreen(
                 title = { Text("战斗 - 回合 ${viewModel.round}") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -95,7 +96,7 @@ fun CombatScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Combat log
             Text("战斗日志", style = MaterialTheme.typography.titleMedium)
