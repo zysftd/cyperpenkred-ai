@@ -228,7 +228,6 @@ File -> Open -> 选择项目目录
 - [赛博朋克红](https://www.rtalstore.com/collections/cyberpunk-red) - R.Talsorian Games 的桌面角色扮演游戏
 - [Jetpack Compose](https://developer.android.com/jetpack/compose) - Android 现代 UI 工具包
 - [Hilt](https://dagger.dev/hilt/) - 依赖注入框架
-- [OpenAI](https://openai.com/) - GPT-4 API
 
 ## 联系方式
 
