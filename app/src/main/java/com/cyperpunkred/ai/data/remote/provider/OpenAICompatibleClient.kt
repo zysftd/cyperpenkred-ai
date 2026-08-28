@@ -164,7 +164,6 @@ class OpenAICompatibleClient @Inject constructor(
                     append(t?.message ?: "unknown SSE failure")
                     if (response != null) {
                         append(" (HTTP ${response.code})")
-                        response.body?.string()?.let { append(": ").append(it.take(200)) }
                     }
                 }
                 channel.trySend(StreamError(msg))

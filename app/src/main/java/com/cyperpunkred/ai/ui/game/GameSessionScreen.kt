@@ -22,6 +22,7 @@ import com.cyperpunkred.ai.data.remote.model.ChatMessage
 import com.cyperpunkred.ai.data.repository.AIRepository
 import com.cyperpunkred.ai.data.repository.AgentEvent
 import com.cyperpunkred.ai.data.repository.GameSessionRepository
+import com.cyperpunkred.ai.ui.common.MarkdownText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -305,9 +306,9 @@ fun GameSessionScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                             }
-                            Text(
+                            MarkdownText(
                                 text = message.content,
-                                style = MaterialTheme.typography.bodyMedium
+                                modifier = Modifier
                             )
                         }
                     }
@@ -352,10 +353,7 @@ fun GameSessionScreen(
                                     }
                                 }
                                 if (streamingText!!.isNotEmpty()) {
-                                    Text(
-                                        text = streamingText!!,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                    MarkdownText(text = streamingText!!)
                                 }
                             }
                         }
