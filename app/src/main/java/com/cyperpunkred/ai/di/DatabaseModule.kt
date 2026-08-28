@@ -22,9 +22,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "cyberpunk_red_ai.db"
-        )
-            .fallbackToDestructiveMigration(dropAllTables = true)
-            .build()
+        ).build()
     }
 
     @Provides

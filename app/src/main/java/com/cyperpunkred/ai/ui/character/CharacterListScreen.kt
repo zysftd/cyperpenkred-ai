@@ -17,8 +17,6 @@ import com.cyperpunkred.ai.data.local.db.entity.CharacterEntity
 import com.cyperpunkred.ai.data.repository.CharacterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -28,17 +26,11 @@ class CharacterListViewModel @Inject constructor(
     private val characterRepository: CharacterRepository
 ) : ViewModel() {
     val characters = characterRepository.getAllCharacters()
-        .map { it.filter { c -> c.id > 0 }.distinctBy { it.id } }
-        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun deleteCharacter(id: Long) {
         viewModelScope.launch {
-            try {
-                characterRepository.deleteCharacter(id)
-            } catch (e: Throwable) {
-                android.util.Log.e("CharListVM", "deleteCharacter($id) failed", e)
-            }
+            characterRepository.deleteCharacter(id)
         }
     }
 }

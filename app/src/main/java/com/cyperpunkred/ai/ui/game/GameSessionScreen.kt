@@ -26,11 +26,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51,24 +49,23 @@ class GameSessionViewModel @Inject constructor(
         if (_sessionId.value == id && _sessionId.value > 0L) return
         _sessionId.value = id
         viewModelScope.launch {
-            try {
-                val existing = sessionRepository.getSessionById(id).first()
-                if (existing == null) {
-                    val newId = sessionRepository.insertSession(
-                        SessionEntity(
-                            characterId = 0L,
-                            title = "新的冒险",
-                            status = "active",
-                            createdAt = System.currentTimeMillis(),
-                            updatedAt = System.currentTimeMillis()
-                        )
+            val existing = sessionRepository.getSessionById(id).first()
+            if (existing == null) {
+                val newId = sessionRepository.insertSession(
+                    SessionEntity(
+                        characterId = 0L,
+                        title = "新的冒险",
+                        status = "active",
+                        createdAt = System.currentTimeMillis(),
+                        updatedAt = System.currentTimeMillis()
                     )
-                    _sessionId.value = newId
-                    sessionRepository.addMessage(
-                        ChatMessageEntity(
-                            sessionId = newId,
-                            role = "assistant",
-                            content = """
+                )
+                _sessionId.value = newId
+                sessionRepository.addMessage(
+                    ChatMessageEntity(
+                        sessionId = newId,
+                        role = "assistant",
+                        content = """
 霓虹灯在雨水中闪烁，夜之城的天际线被全息广告切割成碎片。你站在 Kabuki 区的一条小巷里，空气中弥漫着合成拉面和臭氧的味道。
 
 **欢迎来到夜之城，choom。**
@@ -79,12 +76,9 @@ class GameSessionViewModel @Inject constructor(
 
 > 提示：你可以描述你的角色在做什么，或者告诉我你想去哪里、找谁、做什么。我会根据规则书判定结果。
                         """.trimIndent(),
-                            timestamp = System.currentTimeMillis()
-                        )
+                        timestamp = System.currentTimeMillis()
                     )
-                }
-            } catch (e: Throwable) {
-                android.util.Log.e("GameSession", "initSession failed for id=$id", e)
+                )
             }
         }
     }
@@ -93,8 +87,6 @@ class GameSessionViewModel @Inject constructor(
         .flatMapLatest { id ->
             if (id <= 0L) flowOf(emptyList())
             else sessionRepository.getMessagesForSession(id)
-                .map { it.filter { m -> m.id > 0 }.distinctBy { it.id } }
-                .catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

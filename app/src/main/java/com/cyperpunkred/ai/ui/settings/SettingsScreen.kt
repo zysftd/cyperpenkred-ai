@@ -15,7 +15,6 @@ import androidx.lifecycle.viewModelScope
 import com.cyperpunkred.ai.data.local.datastore.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,16 +24,11 @@ class SettingsViewModel @Inject constructor(
     private val userPreferences: UserPreferences
 ) : ViewModel() {
     val apiKey = userPreferences.apiKey
-        .catch { emit("") }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun saveApiKey(key: String) {
         viewModelScope.launch {
-            try {
-                userPreferences.saveApiKey(key)
-            } catch (e: Throwable) {
-                android.util.Log.e("SettingsVM", "saveApiKey failed", e)
-            }
+            userPreferences.saveApiKey(key)
         }
     }
 }
