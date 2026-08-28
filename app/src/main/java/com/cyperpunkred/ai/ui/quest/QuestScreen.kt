@@ -17,6 +17,7 @@ import com.cyperpunkred.ai.data.local.db.entity.QuestEntity
 import com.cyperpunkred.ai.data.repository.QuestRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +27,7 @@ class QuestViewModel @Inject constructor(
     private val questRepository: QuestRepository
 ) : ViewModel() {
     val quests = questRepository.getAllQuests()
+        .map { it.filter { q -> q.id > 0 }.distinctBy { it.id } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
 
@@ -64,7 +66,7 @@ fun QuestScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(quests) { quest ->
+                items(quests, key = { it.id }) { quest ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         ListItem(
                             headlineContent = { Text(quest.title) },

@@ -24,6 +24,7 @@ import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,20 +43,19 @@ class GameSessionViewModel @Inject constructor(
         viewModelScope.launch {
             val existing = sessionRepository.getSessionById(id).first()
             if (existing == null) {
-                sessionRepository.insertSession(
+                val newId = sessionRepository.insertSession(
                     SessionEntity(
-                        id = id,
-                        characterId = 0,
+                        characterId = 0L,
                         title = "新的冒险",
                         status = "active",
                         createdAt = System.currentTimeMillis(),
                         updatedAt = System.currentTimeMillis()
                     )
                 )
-                // Send welcome message
+                sessionId = newId
                 sessionRepository.addMessage(
                     ChatMessageEntity(
-                        sessionId = sessionId,
+                        sessionId = newId,
                         role = "assistant",
                         content = """
 霓虹灯在雨水中闪烁，夜之城的天际线被全息广告切割成碎片。你站在 Kabuki 区的一条小巷里，空气中弥漫着合成拉面和臭氧的味道。
@@ -66,7 +66,7 @@ class GameSessionViewModel @Inject constructor(
 
 你想做什么？告诉我你的行动，我会引导你在这座钢铁丛林中前行。
 
-> 💡 提示：你可以描述你的角色在做什么，或者告诉我你想去哪里、找谁、做什么。我会根据规则书判定结果。
+> 提示：你可以描述你的角色在做什么，或者告诉我你想去哪里、找谁、做什么。我会根据规则书判定结果。
                         """.trimIndent(),
                         timestamp = System.currentTimeMillis()
                     )
@@ -76,6 +76,7 @@ class GameSessionViewModel @Inject constructor(
     }
 
     val messages = sessionRepository.getMessagesForSession(sessionId)
+        .map { it.filter { m -> m.id > 0 }.distinctBy { it.id } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun sendMessage(content: String) {
@@ -211,7 +212,7 @@ fun GameSessionScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages) { message ->
+            items(messages, key = { it.id }) { message ->
                 val isUser = message.role == "user"
                 Row(
                     modifier = Modifier.fillMaxWidth(),

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,6 +22,7 @@ class GameListViewModel @Inject constructor(
 ) : ViewModel() {
 
     val recentSessions: StateFlow<List<SessionEntity>> = sessionRepository.getRecentSessions()
+        .map { it.filter { s -> s.id > 0 }.distinctBy { it.id } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createNewSession(onResult: (Long?) -> Unit) {

@@ -17,6 +17,7 @@ import com.cyperpunkred.ai.data.local.db.entity.CharacterEntity
 import com.cyperpunkred.ai.data.repository.CharacterRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +27,7 @@ class CharacterListViewModel @Inject constructor(
     private val characterRepository: CharacterRepository
 ) : ViewModel() {
     val characters = characterRepository.getAllCharacters()
+        .map { it.filter { c -> c.id > 0 }.distinctBy { it.id } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun deleteCharacter(id: Long) {
@@ -82,7 +84,7 @@ fun CharacterListScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(characters) { character ->
+                items(characters, key = { it.id }) { character ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onCharacterClick(character.id) }

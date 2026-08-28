@@ -3,6 +3,7 @@ package com.cyperpunkred.ai.ui.game
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -71,7 +72,11 @@ fun CombatScreen(
             // Initiative order
             Text("先攻顺序", style = MaterialTheme.typography.titleMedium)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(viewModel.combatants.withIndex().toList()) { (index, combatant) ->
+                itemsIndexed(
+                    viewModel.combatants.withIndex().toList(),
+                    key = { _, pair -> pair.value.name + ":" + pair.value.initiative }
+                ) { index, indexed ->
+                    val combatant = indexed.value
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -104,7 +109,7 @@ fun CombatScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(viewModel.combatLog) { entry ->
+                itemsIndexed(viewModel.combatLog, key = { idx, _ -> idx }) { _, entry ->
                     Text(entry, style = MaterialTheme.typography.bodyMedium)
                 }
             }
