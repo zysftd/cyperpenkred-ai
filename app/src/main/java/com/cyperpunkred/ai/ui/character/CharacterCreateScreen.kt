@@ -325,8 +325,6 @@ private fun StatRow(
     maxAllowed: Int,
     onStatChanged: (abbr: String, value: Int) -> Unit
 ) {
-    var textValue by remember(value) { mutableStateOf(value.toString()) }
-
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -338,25 +336,15 @@ private fun StatRow(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
-            OutlinedTextField(
-                value = textValue,
-                onValueChange = { input ->
-                    val filtered = input.filter { it.isDigit() }.take(2)
-                    textValue = filtered
-                    val parsed = filtered.toIntOrNull()
-                    if (parsed != null && parsed in 1..maxAllowed) {
-                        onStatChanged(abbr, parsed)
-                    } else if (parsed != null && parsed in 1..10) {
-                        textValue = maxAllowed.toString()
-                        onStatChanged(abbr, maxAllowed)
-                    }
-                },
-                modifier = Modifier.width(64.dp),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.titleMedium,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                )
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .width(40.dp)
+                    .padding(horizontal = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End
             )
         }
         Slider(
