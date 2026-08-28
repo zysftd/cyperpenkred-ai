@@ -138,18 +138,21 @@ class OpenAICompatibleClient @Inject constructor(
                 }
                 delta.toolCalls?.forEach { tc ->
                     val builder = collected.getOrPut(tc.index) { ToolCallBuilder() }
-                    builder.id = tc.id
-                    builder.name = tc.function?.name ?: ""
+                    // tc.id and tc.function?.name can be null on
+                    // partial deltas; accumulate as nullable and
+                    // skip emitting calls that never got an id/name.
+                    tc.id?.let { builder.id = it }
+                    tc.function?.name?.let { builder.name = it }
                     tc.function?.arguments?.let { builder.arguments.append(it) }
                 }
                 if (fr.isNotEmpty()) {
                     val toolCalls = collected.values
-                        .filter { it.id.isNotBlank() && it.name.isNotBlank() }
+                        .filter { !it.id.isNullOrBlank() && !it.name.isNullOrBlank() }
                         .map {
                             ToolCall(
-                                id = it.id,
+                                id = it.id!!,
                                 function = ToolCallFunction(
-                                    name = it.name,
+                                    name = it.name!!,
                                     arguments = it.arguments.toString()
                                 )
                             )
@@ -211,8 +214,8 @@ class OpenAICompatibleClient @Inject constructor(
     }
 
     private class ToolCallBuilder {
-        var id: String = ""
-        var name: String = ""
+        var id: String? = null
+        var name: String? = null
         val arguments: StringBuilder = StringBuilder()
     }
 }
