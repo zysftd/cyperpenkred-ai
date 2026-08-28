@@ -102,6 +102,9 @@ fun CyberpunkRedNavHost(
                     },
                     onViewCharacter = { characterId ->
                         navController.navigate("character_detail/$characterId")
+                    },
+                    onCreateCharacter = {
+                        navController.navigate(Screen.CharacterCreate.route)
                     }
                 )
             }
