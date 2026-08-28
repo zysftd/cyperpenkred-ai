@@ -163,7 +163,7 @@ fun HomeScreen(
                 item {
                     Text("最近的游戏", style = MaterialTheme.typography.titleMedium)
                 }
-                items(recentSessions, key = { it.id }) { session ->
+                items(recentSessions, key = { "session-${it.id}" }) { session ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onStartGame(session.id) }
@@ -181,7 +181,7 @@ fun HomeScreen(
                 item {
                     Text("我的角色", style = MaterialTheme.typography.titleMedium)
                 }
-                items(characters, key = { it.id }) { character ->
+                items(characters, key = { "character-${it.id}" }) { character ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onViewCharacter(character.id) }
