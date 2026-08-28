@@ -12,5 +12,12 @@ val DarkBackground = Color(0xFF0A0A0F)
 val DarkSurface = Color(0xFF12121A)
 val DarkSurfaceVariant = Color(0xFF1A1A2E)
 
+val LightBackground = Color(0xFFF5F5FA)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFE6E6F0)
+
 val TextPrimary = Color(0xFFE0E0E0)
 val TextSecondary = Color(0xFF9E9E9E)
+
+val TextPrimaryLight = Color(0xFF1A1A1F)
+val TextSecondaryLight = Color(0xFF555555)

@@ -32,6 +32,7 @@ sealed class Screen(val route: String) {
     object CharacterList : Screen("character_list")
     object CharacterCreate : Screen("character_create")
     object CharacterDetail : Screen("character_detail/{characterId}")
+    object GameList : Screen("game_list")
     object GameSession : Screen("game_session/{sessionId}")
     object Combat : Screen("combat/{sessionId}")
     object QuestList : Screen("quest_list")
@@ -48,7 +49,7 @@ val bottomNavItems = listOf(
     BottomNavItem(Screen.Home, "首页", Icons.Default.Home),
     BottomNavItem(Screen.QuickRef, "速查", Icons.AutoMirrored.Filled.List),
     BottomNavItem(Screen.CharacterList, "角色", Icons.Default.Person),
-    BottomNavItem(Screen.GameSession, "游戏", Icons.Default.PlayArrow),
+    BottomNavItem(Screen.GameList, "游戏", Icons.Default.PlayArrow),
     BottomNavItem(Screen.Settings, "设置", Icons.Default.Settings)
 )
 
@@ -70,7 +71,12 @@ fun CyberpunkRedNavHost(
                         NavigationBarItem(
                             icon = { Icon(item.icon, contentDescription = item.label) },
                             label = { Text(item.label) },
-                            selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true,
+                            selected = currentDestination?.hierarchy?.any { dest ->
+                                dest.route == item.screen.route ||
+                                    (item.screen == Screen.GameList &&
+                                        (dest.route?.startsWith("game_session/") == true ||
+                                            dest.route?.startsWith("combat/") == true))
+                            } == true,
                             onClick = {
                                 navController.navigate(item.screen.route) {
                                     popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -127,6 +133,16 @@ fun CyberpunkRedNavHost(
             ) {
                 CharacterDetailScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.GameList.route) {
+                com.cyperpunkred.ai.ui.game.GameListScreen(
+                    onSessionClick = { sessionId ->
+                        navController.navigate("game_session/$sessionId")
+                    },
+                    onCreateCharacter = {
+                        navController.navigate(Screen.CharacterCreate.route)
+                    }
                 )
             }
             composable(
