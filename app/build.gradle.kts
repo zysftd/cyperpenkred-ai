@@ -95,6 +95,9 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.2.1")
 
+    // Security (EncryptedSharedPreferences for API keys)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 

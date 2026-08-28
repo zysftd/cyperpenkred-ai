@@ -1,35 +1,23 @@
 package com.cyperpunkred.ai.data.repository
 
 import com.cyperpunkred.ai.data.local.datastore.UserPreferences
-import com.cyperpunkred.ai.data.remote.api.OpenAIApi
 import com.cyperpunkred.ai.data.remote.model.ChatMessage
 import com.cyperpunkred.ai.data.remote.model.ChatRequest
 import com.cyperpunkred.ai.data.remote.model.ChatResponse
+import com.cyperpunkred.ai.data.remote.model.ResponseFormat
 import com.cyperpunkred.ai.data.remote.model.ToolCall
-import com.cyperpunkred.ai.data.remote.model.ToolCallFunction
+import com.cyperpunkred.ai.data.remote.provider.OpenAICompatibleClient
+import com.cyperpunkred.ai.data.remote.provider.ProviderConfig
+import com.cyperpunkred.ai.data.remote.provider.ProviderStore
 import com.cyperpunkred.ai.domain.agent.ToolCatalog
 import com.cyperpunkred.ai.domain.agent.ToolDispatcher
-import com.cyperpunkred.ai.domain.agent.ToolResult
 import com.cyperpunkred.ai.domain.knowledge.RulebookQueryEngine
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import okhttp3.Call
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,29 +28,22 @@ import javax.inject.Singleton
  * the model invokes a function.
  */
 sealed interface AgentEvent {
-    /** A token of assistant prose (during a streaming turn). */
     data class Text(val delta: String) : AgentEvent
-    /** The model decided to call a tool. The UI may show a "rolling X" indicator. */
     data class ToolCallStarted(val name: String) : AgentEvent
-    /** The tool was executed and a result was fed back to the model. */
     data class ToolCallFinished(val name: String, val content: String, val isError: Boolean) : AgentEvent
-    /** The full turn is done. [content] is the final assistant message (may include tool calls). */
     data class TurnFinished(val content: String, val toolCallCount: Int) : AgentEvent
-    /** A fatal error happened (network, etc.). */
     data class Failed(val message: String) : AgentEvent
 }
 
 @Singleton
 class AIRepository @Inject constructor(
-    private val openAIApi: OpenAIApi,
+    private val providerStore: ProviderStore,
     private val userPreferences: UserPreferences,
     private val rulebookQueryEngine: RulebookQueryEngine,
     private val toolDispatcher: ToolDispatcher,
-    private val sseClient: OkHttpClient,
+    private val openAICompatibleClient: OpenAICompatibleClient,
     private val agentRepository: AgentRepository
 ) {
-    private val gson = Gson()
-
     /**
      * Blocking, non-streaming chat. Kept for callers that just want the
      * final text and don't care about per-token updates.
@@ -72,35 +53,45 @@ class AIRepository @Inject constructor(
         conversationHistory: List<ChatMessage>,
         characterContext: String? = null
     ): String {
-        val apiKey = userPreferences.apiKey.first()
-        if (apiKey.isBlank()) return "⚠️ 请先在设置中配置 OpenAI API Key"
+        val provider = providerStore.activeSnapshot()
+            ?: return "⚠️ 请先在设置中配置一个 AI 提供商"
+
+        val strictJson = userPreferences.strictJsonMode.firstOrNull() == true
+        val model = userPreferences.defaultModel.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: provider.defaultModel
 
         val rulesContext = rulebookQueryEngine.getContextForAI(userMessage)
-        val systemPrompt = buildSystemPrompt(characterContext, rulesContext, agentMemory = "")
+        val systemPrompt = buildSystemPrompt(characterContext, rulesContext, agentMemory = "", strictJson = strictJson)
         val messages = mutableListOf(ChatMessage(role = "system", content = systemPrompt))
         messages.addAll(conversationHistory.takeLast(10))
         messages.add(ChatMessage(role = "user", content = userMessage))
 
         val request = ChatRequest(
+            model = model,
             messages = messages,
-            tools = ToolCatalog.all,
-            toolChoice = "auto",
+            tools = if (provider.supportsTools && !strictJson) ToolCatalog.all else null,
+            toolChoice = if (provider.supportsTools && !strictJson) "auto" else null,
+            responseFormat = if (strictJson) ResponseFormat.json() else null,
             maxTokens = 2000,
             temperature = 0.8
         )
 
-        val response = openAIApi.chat("Bearer $apiKey", request)
-        return response.choices.firstOrNull()?.message?.content
-            ?: "抱歉，AI GM 暂时无法回应。"
+        return try {
+            val response = openAICompatibleClient.chat(provider, request)
+            response.choices.firstOrNull()?.message?.content
+                ?: "抱歉，AI GM 暂时无法回应。"
+        } catch (e: Exception) {
+            "⚠️ ${provider.name} 调用失败：${e.message}"
+        }
     }
 
     /**
-     * Streaming agent turn with multi-turn tool execution. The model is
-     * allowed to call any of the RED tools in [ToolCatalog]; every call
-     * is resolved by [ToolDispatcher] and the result is fed back into
-     * the conversation. The loop terminates when the model returns a
-     * final assistant message with no tool_calls, or after
-     * [maxToolRounds] rounds.
+     * Streaming agent turn with multi-turn tool execution.
+     *
+     * Resolves the active provider from [ProviderStore] on each call so
+     * the user can switch providers in the middle of a session.  If
+     * [providerStore]'s active provider does not support tools/stream,
+     * the call degrades gracefully to a single non-streaming round.
      */
     fun streamAgentTurn(
         sessionId: Long,
@@ -109,11 +100,19 @@ class AIRepository @Inject constructor(
         characterContext: String? = null,
         maxToolRounds: Int = 6
     ): Flow<AgentEvent> = flow {
-        val apiKey = userPreferences.apiKey.first()
-        if (apiKey.isBlank()) {
-            emit(AgentEvent.Failed("⚠️ 请先在设置中配置 OpenAI API Key"))
+        val provider = providerStore.activeSnapshot()
+        if (provider == null) {
+            emit(AgentEvent.Failed("⚠️ 请先在设置中配置一个 AI 提供商"))
             return@flow
         }
+        if (provider.apiKey.isBlank()) {
+            emit(AgentEvent.Failed("⚠️ 提供商「${provider.name}」未填写 API Key"))
+            return@flow
+        }
+
+        val strictJson = userPreferences.strictJsonMode.firstOrNull() == true
+        val model = userPreferences.defaultModel.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: provider.defaultModel
 
         val rulesContext = withContext(Dispatchers.IO) {
             rulebookQueryEngine.getContextForAI(userMessage)
@@ -121,42 +120,73 @@ class AIRepository @Inject constructor(
         val agentMemory = withContext(Dispatchers.IO) {
             agentRepository.memoryAsText(sessionId, "GM")
         }
-        val systemPrompt = buildSystemPrompt(characterContext, rulesContext, agentMemory)
+        val systemPrompt = buildSystemPrompt(characterContext, rulesContext, agentMemory, strictJson)
         val messages = mutableListOf(ChatMessage(role = "system", content = systemPrompt))
         messages.addAll(conversationHistory.takeLast(20))
         messages.add(ChatMessage(role = "user", content = userMessage))
 
+        val canTools = provider.supportsTools && !strictJson
         var toolCallCount = 0
         var finalText = ""
-        var collected = StringBuilder()
 
         for (round in 0 until maxToolRounds) {
             val roundText = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()
             var finishReason = ""
 
-            streamOnce(apiKey, messages).collect { event ->
-                when (event) {
-                    is StreamChunk -> {
-                        if (event.text.isNotEmpty()) {
-                            roundText.append(event.text)
-                            emit(AgentEvent.Text(event.text))
+            val request = ChatRequest(
+                model = model,
+                messages = messages,
+                stream = provider.supportsStream,
+                tools = if (canTools) ToolCatalog.all else null,
+                toolChoice = if (canTools) "auto" else null,
+                responseFormat = if (strictJson) ResponseFormat.json() else null,
+                maxTokens = 2000,
+                temperature = 0.8
+            )
+
+            if (provider.supportsStream) {
+                openAICompatibleClient.stream(provider, request).collect { event ->
+                    when (event) {
+                        is OpenAICompatibleClient.StreamText -> {
+                            if (event.text.isNotEmpty()) {
+                                roundText.append(event.text)
+                                emit(AgentEvent.Text(event.text))
+                            }
                         }
-                        val delta = event.toolCallDelta
-                        if (delta != null) toolCalls.add(delta)
-                        if (event.finishReason.isNotEmpty()) finishReason = event.finishReason
+                        is OpenAICompatibleClient.StreamTool -> {
+                            toolCalls.add(event.toolCallDelta)
+                        }
+                        is OpenAICompatibleClient.StreamFinish -> {
+                            finishReason = event.finishReason
+                        }
+                        is OpenAICompatibleClient.StreamEnd -> {
+                            finishReason = event.finishReason
+                        }
+                        is OpenAICompatibleClient.StreamError -> {
+                            emit(AgentEvent.Failed(event.message))
+                            return@collect
+                        }
                     }
-                    is StreamError -> {
-                        emit(AgentEvent.Failed(event.message))
-                        return@collect
+                }
+            } else {
+                try {
+                    val response = openAICompatibleClient.chat(provider, request)
+                    val text = response.choices.firstOrNull()?.message?.content.orEmpty()
+                    if (text.isNotEmpty()) {
+                        roundText.append(text)
+                        emit(AgentEvent.Text(text))
                     }
-                    is StreamEnd -> Unit
+                    response.choices.firstOrNull()?.message?.toolCalls?.forEach { toolCalls.add(it) }
+                    finishReason = response.choices.firstOrNull()?.finishReason.orEmpty()
+                } catch (e: Exception) {
+                    emit(AgentEvent.Failed(e.message ?: "unknown error"))
+                    return@flow
                 }
             }
 
             if (toolCalls.isEmpty()) {
                 finalText = roundText.toString()
-                collected.append(roundText)
                 emit(AgentEvent.TurnFinished(finalText, toolCallCount))
                 withContext(Dispatchers.IO) {
                     if (finalText.isNotBlank()) {
@@ -189,134 +219,25 @@ class AIRepository @Inject constructor(
         emit(AgentEvent.Failed("工具调用超过 $maxToolRounds 轮，已终止"))
     }.flowOn(Dispatchers.IO)
 
-    private sealed interface StreamChunk {
-        val text: String
-        val toolCallDelta: ToolCall?
-        val finishReason: String
-    }
-    private data class StreamText(override val text: String) : StreamChunk {
-        override val toolCallDelta: ToolCall? = null
-        override val finishReason: String = ""
-    }
-    private data class StreamTool(
-        override val text: String,
-        override val toolCallDelta: ToolCall,
-        override val finishReason: String
-    ) : StreamChunk
-    private data class StreamFinish(override val text: String, override val finishReason: String) : StreamChunk {
-        override val toolCallDelta: ToolCall? = null
-    }
-    private data class StreamError(val message: String) : StreamChunk {
-        override val text: String = ""
-        override val toolCallDelta: ToolCall? = null
-        override val finishReason: String = ""
-    }
-    private data class StreamEnd(override val finishReason: String) : StreamChunk {
-        override val text: String = ""
-        override val toolCallDelta: ToolCall? = null
-    }
-
-    /**
-     * One streamed chat completion. Emits StreamText/StreamTool tokens
-     * as they arrive and a StreamEnd when the connection closes. Errors
-     * are emitted as StreamError (so the caller can still continue the
-     * loop if it wants to).
-     */
-    private fun streamOnce(
-        apiKey: String,
-        messages: List<ChatMessage>
-    ): Flow<StreamChunk> = flow {
-        val request = ChatRequest(
-            messages = messages,
-            stream = true,
-            tools = ToolCatalog.all,
-            toolChoice = "auto",
-            maxTokens = 2000,
-            temperature = 0.8
-        )
-
-        val requestBody = gson.toJson(request).toRequestBody("application/json".toMediaType())
-        val httpRequest = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
-            .header("Authorization", "Bearer $apiKey")
-            .header("Accept", "text/event-stream")
-            .post(requestBody)
-            .build()
-
-        val factory = EventSources.createFactory(sseClient)
-        val collectedToolCalls = mutableMapOf<Int, ToolCallBuilder>()
-
-        val channel = kotlinx.coroutines.channels.Channel<StreamChunk>(capacity = Channel.BUFFERED)
-        val listener = object : EventSourceListener() {
-            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                if (data == "[DONE]") {
-                    channel.trySend(StreamEnd(""))
-                    return
-                }
-                val parsed = runCatching { gson.fromJson(data, ChatResponse::class.java) }.getOrNull()
-                val choice = parsed?.choices?.firstOrNull() ?: return
-                val delta = choice.delta ?: return
-                val fr = choice.finishReason.orEmpty()
-                val text = delta.content.orEmpty()
-                if (text.isNotEmpty()) {
-                    channel.trySend(StreamText(text))
-                }
-                delta.toolCalls?.forEach { tc ->
-                    val builder = collectedToolCalls.getOrPut(tc.index) { ToolCallBuilder() }
-                    builder.id = tc.id
-                    builder.name = tc.function?.name ?: ""
-                    tc.function?.arguments?.let { builder.arguments.append(it) }
-                }
-                if (fr.isNotEmpty()) {
-                    // Flush any complete tool calls
-                    val toolCalls = collectedToolCalls.values
-                        .filter { it.id.isNotBlank() && it.name.isNotBlank() }
-                        .map {
-                            ToolCall(
-                                id = it.id,
-                                function = ToolCallFunction(
-                                    name = it.name,
-                                    arguments = it.arguments.toString()
-                                )
-                            )
-                        }
-                    toolCalls.forEach { channel.trySend(StreamTool(text = "", toolCallDelta = it, finishReason = fr)) }
-                    channel.trySend(StreamFinish(text = text, finishReason = fr))
-                }
-            }
-
-            override fun onFailure(eventSource: EventSource, t: Throwable?, response: okhttp3.Response?) {
-                channel.trySend(StreamError(t?.message ?: "unknown SSE failure"))
-                channel.close()
-            }
-
-            override fun onClosed(eventSource: EventSource) {
-                channel.trySend(StreamEnd(""))
-            }
-        }
-
-        val eventSource: EventSource = factory.newEventSource(httpRequest, listener)
-        try {
-            for (chunk in channel) {
-                if (chunk is StreamEnd) break
-                emit(chunk)
-            }
-        } finally {
-            eventSource.cancel()
-        }
-    }
-
-    private class ToolCallBuilder {
-        var id: String = ""
-        var name: String = ""
-        val arguments: StringBuilder = StringBuilder()
-    }
-
     private fun buildSystemPrompt(
         characterContext: String?,
         rulesContext: String,
-        agentMemory: String = ""
+        agentMemory: String,
+        strictJson: Boolean = false
     ): String {
+        val strictDirective = if (strictJson) {
+            """
+            |
+            |## 响应格式
+            |你**必须**只返回合法的 JSON 对象，结构如下：
+            |{
+            |  "narration": "你的叙事文本（中文，使用 markdown）",
+            |  "tool_calls": [{"name": "roll_dice", "arguments": "{\"stat\":1,\"skill\":1,\"dv\":13}"}]
+            |}
+            |不要添加 JSON 之外的任何文本。不要使用 markdown 代码块包裹。
+            |""".trimMargin()
+        } else ""
+
         return """
 # 角色：你是赛博朋克红（Cyberpunk RED）的AI游戏主持人（GM）
 
@@ -340,6 +261,7 @@ class AIRepository @Inject constructor(
 - `tech_fabricate` / `tech_invent` — 技痴制造/发明。
 
 调用流程：每次玩家行动需要判定时 → 先 `roll_dice` → 根据成功/失败决定后续叙事；如造成伤害必须 `roll_damage` → 减护甲SP → `apply_damage`。对网行者和技痴的所有子操作都使用对应专用工具，不要直接编结果。
+$strictDirective
 
 ## 核心规则
 
@@ -407,6 +329,6 @@ ${characterContext ?: "玩家角色尚未创建。请等待玩家完成角色创
 - NPC对话用引号
 - 骰点结果用代码块或加粗
 - 战斗动作清晰列出
-""".trimIndent()
+        """.trimIndent()
     }
 }
