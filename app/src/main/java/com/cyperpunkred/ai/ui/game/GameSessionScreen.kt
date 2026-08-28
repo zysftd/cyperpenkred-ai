@@ -20,6 +20,7 @@ import com.cyperpunkred.ai.data.local.db.entity.ChatMessageEntity
 import com.cyperpunkred.ai.data.local.db.entity.SessionEntity
 import com.cyperpunkred.ai.data.remote.model.ChatMessage
 import com.cyperpunkred.ai.data.repository.AIRepository
+import com.cyperpunkred.ai.data.repository.AgentEvent
 import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,36 +106,41 @@ class GameSessionViewModel @Inject constructor(
 
             isLoading = true
 
-            try {
-                val history = messages.value.map {
-                    ChatMessage(role = it.role, content = it.content)
-                }
+            val history = messages.value.map {
+                ChatMessage(role = it.role, content = it.content)
+            }
 
-                val response = aiRepository.generateGMResponse(
+            val pendingBuilder = StringBuilder()
+            try {
+                aiRepository.streamAgentTurn(
+                    sessionId = id,
                     userMessage = content,
                     conversationHistory = history
-                )
-
-                sessionRepository.addMessage(
-                    ChatMessageEntity(
-                        sessionId = id,
-                        role = "assistant",
-                        content = response,
-                        timestamp = System.currentTimeMillis()
-                    )
-                )
+                ).collect { event ->
+                    when (event) {
+                        is AgentEvent.Text -> pendingBuilder.append(event.delta)
+                        is AgentEvent.ToolCallStarted -> pendingBuilder.append("\n\n> 🎲 ${event.name} ...\n")
+                        is AgentEvent.ToolCallFinished -> pendingBuilder.append("> ${event.name}: ${event.content.take(200)}\n")
+                        is AgentEvent.TurnFinished -> Unit
+                        is AgentEvent.Failed -> pendingBuilder.append("\n\n⚠️ ${event.message}")
+                    }
+                }
             } catch (e: Exception) {
+                pendingBuilder.append("\n\n⚠️ AI GM 暂时无法回应：${e.message}")
+            }
+
+            val finalContent = pendingBuilder.toString().trim()
+            if (finalContent.isNotEmpty()) {
                 sessionRepository.addMessage(
                     ChatMessageEntity(
                         sessionId = id,
                         role = "assistant",
-                        content = "⚠️ AI GM 暂时无法回应：${e.message}",
+                        content = finalContent,
                         timestamp = System.currentTimeMillis()
                     )
                 )
-            } finally {
-                isLoading = false
             }
+            isLoading = false
         }
     }
 }

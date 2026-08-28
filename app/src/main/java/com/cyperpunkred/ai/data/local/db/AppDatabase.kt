@@ -15,9 +15,10 @@ import com.cyperpunkred.ai.data.local.db.entity.*
         ChatMessageEntity::class,
         CombatLogEntity::class,
         NPCEntity::class,
-        QuestEntity::class
+        QuestEntity::class,
+        AgentEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -29,4 +30,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun combatLogDao(): CombatLogDao
     abstract fun npcDao(): NPCDao
     abstract fun questDao(): QuestDao
+    abstract fun agentDao(): AgentDao
 }

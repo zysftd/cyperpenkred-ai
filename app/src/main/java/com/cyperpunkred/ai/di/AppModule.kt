@@ -1,8 +1,6 @@
 package com.cyperpunkred.ai.di
 
-import com.cyperpunkred.ai.data.local.datastore.UserPreferences
-import com.cyperpunkred.ai.data.remote.api.OpenAIApi
-import com.cyperpunkred.ai.data.repository.*
+import com.cyperpunkred.ai.data.repository.RulebookRepository
 import com.cyperpunkred.ai.domain.engine.CombatEngine
 import com.cyperpunkred.ai.domain.engine.CharacterEngine
 import com.cyperpunkred.ai.domain.engine.DiceEngine
@@ -38,12 +36,4 @@ object AppModule {
     @Singleton
     fun provideRulebookQueryEngine(rulebookRepository: RulebookRepository): RulebookQueryEngine =
         RulebookQueryEngine(rulebookRepository)
-
-    @Provides
-    @Singleton
-    fun provideAIRepository(
-        openAIApi: OpenAIApi,
-        userPreferences: UserPreferences,
-        rulebookQueryEngine: RulebookQueryEngine
-    ): AIRepository = AIRepository(openAIApi, userPreferences, rulebookQueryEngine)
 }

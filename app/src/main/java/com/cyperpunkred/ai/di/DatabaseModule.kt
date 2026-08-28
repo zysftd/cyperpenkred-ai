@@ -45,4 +45,7 @@ object DatabaseModule {
 
     @Provides
     fun provideQuestDao(database: AppDatabase): QuestDao = database.questDao()
+
+    @Provides
+    fun provideAgentDao(database: AppDatabase): AgentDao = database.agentDao()
 }
