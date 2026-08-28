@@ -17,6 +17,7 @@ import com.cyperpunkred.ai.data.local.db.entity.QuestEntity
 import com.cyperpunkred.ai.data.repository.QuestRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ class QuestViewModel @Inject constructor(
 ) : ViewModel() {
     val quests = questRepository.getAllQuests()
         .map { it.filter { q -> q.id > 0 }.distinctBy { it.id } }
+        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
 

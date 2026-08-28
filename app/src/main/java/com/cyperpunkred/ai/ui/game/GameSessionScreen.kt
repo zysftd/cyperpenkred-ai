@@ -22,42 +22,53 @@ import com.cyperpunkred.ai.data.remote.model.ChatMessage
 import com.cyperpunkred.ai.data.repository.AIRepository
 import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class GameSessionViewModel @Inject constructor(
     private val sessionRepository: GameSessionRepository,
     private val aiRepository: AIRepository
 ) : ViewModel() {
-    private var sessionId = 0L
+    private val _sessionId = MutableStateFlow(0L)
+    val sessionId: StateFlow<Long> = _sessionId.asStateFlow()
     var isLoading by mutableStateOf(false)
         private set
 
     fun initSession(id: Long) {
-        sessionId = id
+        if (_sessionId.value == id && _sessionId.value > 0L) return
+        _sessionId.value = id
         viewModelScope.launch {
-            val existing = sessionRepository.getSessionById(id).first()
-            if (existing == null) {
-                val newId = sessionRepository.insertSession(
-                    SessionEntity(
-                        characterId = 0L,
-                        title = "新的冒险",
-                        status = "active",
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
+            try {
+                val existing = sessionRepository.getSessionById(id).first()
+                if (existing == null) {
+                    val newId = sessionRepository.insertSession(
+                        SessionEntity(
+                            characterId = 0L,
+                            title = "新的冒险",
+                            status = "active",
+                            createdAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
                     )
-                )
-                sessionId = newId
-                sessionRepository.addMessage(
-                    ChatMessageEntity(
-                        sessionId = newId,
-                        role = "assistant",
-                        content = """
+                    _sessionId.value = newId
+                    sessionRepository.addMessage(
+                        ChatMessageEntity(
+                            sessionId = newId,
+                            role = "assistant",
+                            content = """
 霓虹灯在雨水中闪烁，夜之城的天际线被全息广告切割成碎片。你站在 Kabuki 区的一条小巷里，空气中弥漫着合成拉面和臭氧的味道。
 
 **欢迎来到夜之城，choom。**
@@ -68,23 +79,32 @@ class GameSessionViewModel @Inject constructor(
 
 > 提示：你可以描述你的角色在做什么，或者告诉我你想去哪里、找谁、做什么。我会根据规则书判定结果。
                         """.trimIndent(),
-                        timestamp = System.currentTimeMillis()
+                            timestamp = System.currentTimeMillis()
+                        )
                     )
-                )
+                }
+            } catch (e: Throwable) {
+                android.util.Log.e("GameSession", "initSession failed for id=$id", e)
             }
         }
     }
 
-    val messages = sessionRepository.getMessagesForSession(sessionId)
-        .map { it.filter { m -> m.id > 0 }.distinctBy { it.id } }
+    val messages: StateFlow<List<ChatMessageEntity>> = _sessionId
+        .flatMapLatest { id ->
+            if (id <= 0L) flowOf(emptyList())
+            else sessionRepository.getMessagesForSession(id)
+                .map { it.filter { m -> m.id > 0 }.distinctBy { it.id } }
+                .catch { emit(emptyList()) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun sendMessage(content: String) {
+        val id = _sessionId.value
+        if (id <= 0L) return
         viewModelScope.launch {
-            // Add user message
             sessionRepository.addMessage(
                 ChatMessageEntity(
-                    sessionId = sessionId,
+                    sessionId = id,
                     role = "user",
                     content = content,
                     timestamp = System.currentTimeMillis()
@@ -94,21 +114,18 @@ class GameSessionViewModel @Inject constructor(
             isLoading = true
 
             try {
-                // Get conversation history
                 val history = messages.value.map {
                     ChatMessage(role = it.role, content = it.content)
                 }
 
-                // Generate AI response
                 val response = aiRepository.generateGMResponse(
                     userMessage = content,
                     conversationHistory = history
                 )
 
-                // Add AI response
                 sessionRepository.addMessage(
                     ChatMessageEntity(
-                        sessionId = sessionId,
+                        sessionId = id,
                         role = "assistant",
                         content = response,
                         timestamp = System.currentTimeMillis()
@@ -117,7 +134,7 @@ class GameSessionViewModel @Inject constructor(
             } catch (e: Exception) {
                 sessionRepository.addMessage(
                     ChatMessageEntity(
-                        sessionId = sessionId,
+                        sessionId = id,
                         role = "assistant",
                         content = "⚠️ AI GM 暂时无法回应：${e.message}",
                         timestamp = System.currentTimeMillis()

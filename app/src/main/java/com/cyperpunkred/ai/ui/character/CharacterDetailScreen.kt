@@ -23,6 +23,7 @@ import com.cyperpunkred.ai.domain.model.Stats
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -34,6 +35,7 @@ class CharacterDetailViewModel @Inject constructor(
     private val characterId = savedStateHandle.get<Long>("characterId") ?: 0L
 
     val character = characterRepository.getCharacterById(characterId)
+        .catch { emit(null) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 }
 

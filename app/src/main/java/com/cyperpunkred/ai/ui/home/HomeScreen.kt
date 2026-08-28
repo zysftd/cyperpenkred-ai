@@ -20,6 +20,7 @@ import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -35,30 +36,37 @@ class HomeViewModel @Inject constructor(
     val characters: StateFlow<List<com.cyperpunkred.ai.data.local.db.entity.CharacterEntity>> =
         characterRepository.getAllCharacters()
             .map { it.filter { c -> c.id > 0 }.distinctBy { it.id } }
+            .catch { emit(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val recentSessions: StateFlow<List<SessionEntity>> = sessionRepository.getRecentSessions()
         .map { it.filter { s -> s.id > 0 }.distinctBy { it.id } }
+        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createNewSession(onResult: (Long?) -> Unit) {
         viewModelScope.launch {
-            val characters = characterRepository.getAllCharacters().first()
-            if (characters.isEmpty()) {
+            try {
+                val characters = characterRepository.getAllCharacters().first()
+                if (characters.isEmpty()) {
+                    onResult(null)
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                val character = characters.first()
+                val session = SessionEntity(
+                    characterId = character.id,
+                    title = "${character.name} 的冒险",
+                    status = "active",
+                    createdAt = now,
+                    updatedAt = now
+                )
+                val id = sessionRepository.insertSession(session)
+                onResult(id)
+            } catch (e: Throwable) {
+                android.util.Log.e("HomeCreate", "createNewSession failed", e)
                 onResult(null)
-                return@launch
             }
-            val now = System.currentTimeMillis()
-            val character = characters.first()
-            val session = SessionEntity(
-                characterId = character.id,
-                title = "${character.name} 的冒险",
-                status = "active",
-                createdAt = now,
-                updatedAt = now
-            )
-            val id = sessionRepository.insertSession(session)
-            onResult(id)
         }
     }
 }
