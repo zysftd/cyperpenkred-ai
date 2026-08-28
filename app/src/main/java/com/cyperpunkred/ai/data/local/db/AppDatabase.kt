@@ -18,7 +18,7 @@ import com.cyperpunkred.ai.data.local.db.entity.*
         QuestEntity::class,
         AgentEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

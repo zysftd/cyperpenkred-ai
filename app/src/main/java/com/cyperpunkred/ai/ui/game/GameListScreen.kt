@@ -17,7 +17,7 @@ import com.cyperpunkred.ai.data.local.db.entity.SessionEntity
 @Composable
 fun GameListScreen(
     onSessionClick: (Long) -> Unit,
-    onCreateCharacter: () -> Unit,
+    onPickCharacterForGame: () -> Unit,
     viewModel: GameListViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.recentSessions.collectAsState()
@@ -27,13 +27,7 @@ fun GameListScreen(
             TopAppBar(title = { Text("游戏") })
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                viewModel.createNewSession { newId ->
-                    if (newId != null) {
-                        onSessionClick(newId)
-                    }
-                }
-            }) {
+            FloatingActionButton(onClick = onPickCharacterForGame) {
                 Icon(Icons.Default.Add, contentDescription = "新建游戏")
             }
         }
@@ -41,12 +35,7 @@ fun GameListScreen(
         if (sessions.isEmpty()) {
             EmptyState(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                onCreateCharacter = onCreateCharacter,
-                onStart = {
-                    viewModel.createNewSession { newId ->
-                        if (newId != null) onSessionClick(newId)
-                    }
-                }
+                onPickCharacter = onPickCharacterForGame
             )
         } else {
             LazyColumn(
@@ -69,10 +58,8 @@ fun GameListScreen(
 @Composable
 private fun EmptyState(
     modifier: Modifier = Modifier,
-    onCreateCharacter: () -> Unit,
-    onStart: () -> Unit
+    onPickCharacter: () -> Unit
 ) {
-    var showNoCharacterHint by remember { mutableStateOf(false) }
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center
@@ -91,28 +78,13 @@ private fun EmptyState(
             Text("还没有游戏记录", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "点击右下角 + 开始新游戏",
+                "选一个角色开始新游戏",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
-            FilledTonalButton(onClick = {
-                onStart()
-                showNoCharacterHint = true
-            }) {
-                Text("开始第一次冒险")
-            }
-            if (showNoCharacterHint) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "请先创建角色",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(onClick = onCreateCharacter) {
-                    Text("去创建角色")
-                }
+            FilledTonalButton(onClick = onPickCharacter) {
+                Text("选择角色开始")
             }
         }
     }

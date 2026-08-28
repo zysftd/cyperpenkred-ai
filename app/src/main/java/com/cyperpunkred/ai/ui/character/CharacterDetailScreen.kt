@@ -18,23 +18,44 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cyperpunkred.ai.data.local.db.entity.CharacterEntity
 import com.cyperpunkred.ai.data.repository.CharacterRepository
+import com.cyperpunkred.ai.data.repository.GameSessionRepository
+import com.cyperpunkred.ai.data.repository.StartSessionResult
 import com.cyperpunkred.ai.domain.model.Skills
 import com.cyperpunkred.ai.domain.model.Stats
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class CharacterDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    characterRepository: CharacterRepository
+    characterRepository: CharacterRepository,
+    private val sessionRepository: GameSessionRepository
 ) : ViewModel() {
     private val characterId = savedStateHandle.get<Long>("characterId") ?: 0L
 
     val character = characterRepository.getCharacterById(characterId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * Start (or resume) a game for this character. Returns the
+     * session id via [onResult], or null if the character vanished.
+     */
+    fun startGame(onResult: (Long?) -> Unit) {
+        viewModelScope.launch {
+            val r = sessionRepository.startSession(characterId)
+            onResult(
+                when (r) {
+                    is StartSessionResult.Created -> r.sessionId
+                    is StartSessionResult.ExistingActive -> r.sessionId
+                    StartSessionResult.NoSuchCharacter -> null
+                }
+            )
+        }
+    }
 }
 
 private val gson = Gson()
@@ -123,9 +144,11 @@ private val skillGroups: List<Pair<String, List<Pair<String, (Skills) -> Int>>>>
 @Composable
 fun CharacterDetailScreen(
     onBack: () -> Unit,
+    onSessionStarted: (Long) -> Unit,
     viewModel: CharacterDetailViewModel = hiltViewModel()
 ) {
     val character by viewModel.character.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
         topBar = {
@@ -135,9 +158,25 @@ fun CharacterDetailScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
+                },
+                actions = {
+                    character?.let {
+                        TextButton(
+                            onClick = {
+                                viewModel.startGame { newId ->
+                                    if (newId != null) onSessionStarted(newId)
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("开始新游戏")
+                        }
+                    }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         character?.let { char ->
             Column(
@@ -151,6 +190,18 @@ fun CharacterDetailScreen(
                 BasicInfoCard(char)
                 StatsCard(char)
                 SkillsCard(char)
+                Button(
+                    onClick = {
+                        viewModel.startGame { newId ->
+                            if (newId != null) onSessionStarted(newId)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("开始新游戏（若已有进行中冒险，将直接续玩）")
+                }
             }
         }
     }

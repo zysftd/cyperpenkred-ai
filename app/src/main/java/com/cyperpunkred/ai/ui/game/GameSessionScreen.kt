@@ -17,10 +17,11 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cyperpunkred.ai.data.local.db.entity.ChatMessageEntity
-import com.cyperpunkred.ai.data.local.db.entity.SessionEntity
+import com.cyperpunkred.ai.data.local.db.entity.CharacterEntity
 import com.cyperpunkred.ai.data.remote.model.ChatMessage
 import com.cyperpunkred.ai.data.repository.AIRepository
 import com.cyperpunkred.ai.data.repository.AgentEvent
+import com.cyperpunkred.ai.data.repository.CharacterRepository
 import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import com.cyperpunkred.ai.ui.common.MarkdownText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,6 +54,7 @@ data class ToolCallUi(
 @HiltViewModel
 class GameSessionViewModel @Inject constructor(
     private val sessionRepository: GameSessionRepository,
+    private val characterRepository: CharacterRepository,
     private val aiRepository: AIRepository
 ) : ViewModel() {
     private val _sessionId = MutableStateFlow(0L)
@@ -71,37 +73,37 @@ class GameSessionViewModel @Inject constructor(
     private val _streamingTools = MutableStateFlow<List<ToolCallUi>>(emptyList())
     val streamingTools: StateFlow<List<ToolCallUi>> = _streamingTools.asStateFlow()
 
+    private val _character = MutableStateFlow<CharacterEntity?>(null)
+    val character: StateFlow<CharacterEntity?> = _character.asStateFlow()
+
     fun initSession(id: Long) {
         if (_sessionId.value == id && _sessionId.value > 0L) return
         _sessionId.value = id
         viewModelScope.launch {
-            val existing = sessionRepository.getSessionById(id).first()
-            if (existing == null) {
-                val newId = sessionRepository.insertSession(
-                    SessionEntity(
-                        characterId = 0L,
-                        title = "新的冒险",
-                        status = "active",
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
-                    )
-                )
-                _sessionId.value = newId
-                sessionRepository.addMessage(
-                    ChatMessageEntity(
-                        sessionId = newId,
-                        role = "assistant",
-                        content = """
+            val existing = sessionRepository.getSessionByIdOnce(id) ?: return@launch
+            val character = characterRepository.getCharacterByIdOnce(existing.characterId)
+            _character.value = character
+
+            // First-time greeting only if the conversation is empty.
+            val currentMessages = sessionRepository.getMessagesForSession(id).first()
+            if (currentMessages.isEmpty()) {
+                val characterName = character?.name ?: "choom"
+                val greeting = """
 霓虹灯在雨水中闪烁，夜之城的天际线被全息广告切割成碎片。你站在 Kabuki 区的一条小巷里，空气中弥漫着合成拉面和臭氧的味道。
 
-**欢迎来到夜之城，choom。**
+**欢迎来到夜之城，$characterName。**
 
 我是你的游戏主持人。在这里，每个人都在为生存而战——有人用枪，有人用键盘，有人用出卖灵魂。
 
 你想做什么？告诉我你的行动，我会引导你在这座钢铁丛林中前行。
 
 > 提示：你可以描述你的角色在做什么，或者告诉我你想去哪里、找谁、做什么。我会根据规则书判定结果。
-                        """.trimIndent(),
+                """.trimIndent()
+                sessionRepository.addMessage(
+                    ChatMessageEntity(
+                        sessionId = id,
+                        role = "assistant",
+                        content = greeting,
                         timestamp = System.currentTimeMillis()
                     )
                 )
@@ -115,6 +117,19 @@ class GameSessionViewModel @Inject constructor(
             else sessionRepository.getMessagesForSession(id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun buildCharacterContext(c: CharacterEntity): String = buildString {
+        appendLine("姓名: ${c.name}")
+        appendLine("角色: ${c.role}")
+        appendLine("年龄: ${c.age}")
+        appendLine("HP: ${c.currentHP}/${c.maxHP}")
+        appendLine("护甲 SP: ${c.armorSP}")
+        appendLine("人性值: ${c.humanity}")
+        if (c.backstoryJson.isNotBlank() && c.backstoryJson != "{}") appendLine("背景: $c.backstoryJson")
+        if (c.lifepathJson.isNotBlank() && c.lifepathJson != "{}") appendLine("人生路径: $c.lifepathJson")
+        if (c.equipmentJson.isNotBlank() && c.equipmentJson != "{}") appendLine("装备: $c.equipmentJson")
+        if (c.cyberwareJson.isNotBlank() && c.cyberwareJson != "{}") appendLine("义体: $c.cyberwareJson")
+    }
 
     fun sendMessage(content: String) {
         val id = _sessionId.value
@@ -136,6 +151,7 @@ class GameSessionViewModel @Inject constructor(
             val history = messages.value.map {
                 ChatMessage(role = it.role, content = it.content)
             }
+            val characterContext = _character.value?.let { buildCharacterContext(it) }
 
             val pendingBuilder = StringBuilder()
             val pendingTools = mutableListOf<ToolCallUi>()
@@ -144,7 +160,8 @@ class GameSessionViewModel @Inject constructor(
                 aiRepository.streamAgentTurn(
                     sessionId = id,
                     userMessage = content,
-                    conversationHistory = history
+                    conversationHistory = history,
+                    characterContext = characterContext
                 ).collect { event ->
                     when (event) {
                         is AgentEvent.Text -> {
@@ -213,6 +230,7 @@ fun GameSessionScreen(
     val messages by viewModel.messages.collectAsState()
     val streamingText by viewModel.streamingText.collectAsState()
     val streamingTools by viewModel.streamingTools.collectAsState()
+    val character by viewModel.character.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -226,7 +244,17 @@ fun GameSessionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("夜之城冒险") },
+                title = {
+                    Column {
+                        Text(character?.let { "${it.name} · ${it.role}" } ?: "夜之城冒险")
+                        if (character != null) {
+                            Text(
+                                "HP ${character!!.currentHP}/${character!!.maxHP} · SP ${character!!.armorSP}",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

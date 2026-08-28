@@ -12,6 +12,9 @@ interface CharacterDao {
     @Query("SELECT * FROM characters WHERE id = :id")
     fun getCharacterById(id: Long): Flow<CharacterEntity?>
 
+    @Query("SELECT * FROM characters WHERE id = :id")
+    suspend fun getCharacterByIdOnce(id: Long): CharacterEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCharacter(character: CharacterEntity): Long
 

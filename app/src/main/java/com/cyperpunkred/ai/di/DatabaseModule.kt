@@ -3,6 +3,7 @@ package com.cyperpunkred.ai.di
 import android.content.Context
 import androidx.room.Room
 import com.cyperpunkred.ai.data.local.db.AppDatabase
+import com.cyperpunkred.ai.data.local.db.MIGRATION_2_3
 import com.cyperpunkred.ai.data.local.db.dao.*
 import dagger.Module
 import dagger.Provides
@@ -22,7 +23,9 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "cyberpunk_red_ai.db"
-        ).build()
+        )
+            .addMigrations(MIGRATION_2_3)
+            .build()
     }
 
     @Provides

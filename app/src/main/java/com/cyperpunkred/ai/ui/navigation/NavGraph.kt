@@ -97,7 +97,10 @@ fun CyberpunkRedNavHost(
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onStartGame = { sessionId ->
+                    onPickCharacterForGame = {
+                        navController.navigate(Screen.CharacterList.route)
+                    },
+                    onResumeSession = { sessionId ->
                         navController.navigate("game_session/$sessionId")
                     },
                     onViewCharacter = { characterId ->
@@ -118,6 +121,11 @@ fun CyberpunkRedNavHost(
                     },
                     onCreateCharacter = {
                         navController.navigate(Screen.CharacterCreate.route)
+                    },
+                    onSessionStarted = { sessionId ->
+                        navController.navigate("game_session/$sessionId") {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
                     }
                 )
             }
@@ -135,7 +143,12 @@ fun CyberpunkRedNavHost(
                 arguments = listOf(navArgument("characterId") { type = NavType.LongType })
             ) {
                 CharacterDetailScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onSessionStarted = { sessionId ->
+                        navController.navigate("game_session/$sessionId") {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    }
                 )
             }
             composable(Screen.GameList.route) {
@@ -143,8 +156,8 @@ fun CyberpunkRedNavHost(
                     onSessionClick = { sessionId ->
                         navController.navigate("game_session/$sessionId")
                     },
-                    onCreateCharacter = {
-                        navController.navigate(Screen.CharacterCreate.route)
+                    onPickCharacterForGame = {
+                        navController.navigate(Screen.CharacterList.route)
                     }
                 )
             }

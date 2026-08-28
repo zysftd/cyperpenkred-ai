@@ -17,6 +17,18 @@ interface SessionDao {
     @Query("SELECT * FROM game_sessions WHERE id = :id")
     fun getSessionById(id: Long): Flow<SessionEntity?>
 
+    @Query("SELECT * FROM game_sessions WHERE id = :id")
+    suspend fun getSessionByIdOnce(id: Long): SessionEntity?
+
+    /**
+     * Returns the most recent active session for [characterId], or
+     * null if the character has no running adventure. Used to
+     * enforce the 1-character-per-1-active-session rule when the
+     * user tries to start a new game.
+     */
+    @Query("SELECT * FROM game_sessions WHERE characterId = :characterId AND status = 'active' ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getActiveSessionForCharacter(characterId: Long): SessionEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: SessionEntity): Long
 

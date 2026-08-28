@@ -20,15 +20,13 @@ import com.cyperpunkred.ai.data.repository.GameSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val characterRepository: CharacterRepository,
-    private val sessionRepository: GameSessionRepository
+    characterRepository: CharacterRepository,
+    sessionRepository: GameSessionRepository
 ) : ViewModel() {
 
     val characters: StateFlow<List<com.cyperpunkred.ai.data.local.db.entity.CharacterEntity>> =
@@ -37,33 +35,13 @@ class HomeViewModel @Inject constructor(
 
     val recentSessions: StateFlow<List<SessionEntity>> = sessionRepository.getRecentSessions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun createNewSession(onResult: (Long?) -> Unit) {
-        viewModelScope.launch {
-            val characters = characterRepository.getAllCharacters().first()
-            if (characters.isEmpty()) {
-                onResult(null)
-                return@launch
-            }
-            val now = System.currentTimeMillis()
-            val character = characters.first()
-            val session = SessionEntity(
-                characterId = character.id,
-                title = "${character.name} 的冒险",
-                status = "active",
-                createdAt = now,
-                updatedAt = now
-            )
-            val id = sessionRepository.insertSession(session)
-            onResult(id)
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onStartGame: (Long) -> Unit,
+    onPickCharacterForGame: () -> Unit,
+    onResumeSession: (Long) -> Unit,
     onViewCharacter: (Long) -> Unit,
     onCreateCharacter: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
@@ -71,26 +49,7 @@ fun HomeScreen(
     val characters by viewModel.characters.collectAsState()
     val recentSessions by viewModel.recentSessions.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var missingCharacterMsg by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(missingCharacterMsg) {
-        val msg = missingCharacterMsg ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
-            message = msg,
-            actionLabel = "去创建",
-            duration = SnackbarDuration.Short
-        )
-        if (result == SnackbarResult.ActionPerformed) {
-            onCreateCharacter()
-        }
-        missingCharacterMsg = null
-    }
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
+    Scaffold { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -115,15 +74,7 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     ),
-                    onClick = {
-                        viewModel.createNewSession { newId ->
-                            if (newId != null) {
-                                onStartGame(newId)
-                            } else {
-                                missingCharacterMsg = "请先创建角色再开始冒险"
-                            }
-                        }
-                    }
+                    onClick = onPickCharacterForGame
                 ) {
                     Row(
                         modifier = Modifier.padding(20.dp),
@@ -136,14 +87,15 @@ fun HomeScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("开始冒险", style = MaterialTheme.typography.titleLarge)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("开始新冒险", style = MaterialTheme.typography.titleLarge)
                             Text(
                                 if (characters.isEmpty()) "需要先创建角色"
-                                else "与 AI GM 一起探索夜之城",
+                                else "选择一名角色开始游戏",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
+                        Icon(Icons.AutoMirrored.Filled.ArrowRight, contentDescription = null)
                     }
                 }
             }
@@ -155,12 +107,21 @@ fun HomeScreen(
                 items(recentSessions, key = { "session-${it.id}" }) { session ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { onStartGame(session.id) }
+                        onClick = { onResumeSession(session.id) }
                     ) {
                         ListItem(
                             headlineContent = { Text(session.title) },
-                            supportingContent = { Text("状态: ${session.status}") },
-                            leadingContent = { Icon(Icons.Default.Favorite, null) }
+                            supportingContent = {
+                                val statusLabel = when (session.status) {
+                                    "active" -> "进行中"
+                                    "completed" -> "已完成"
+                                    "paused" -> "暂停"
+                                    else -> session.status
+                                }
+                                Text("状态: $statusLabel")
+                            },
+                            leadingContent = { Icon(Icons.Default.Favorite, null) },
+                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowRight, null) }
                         )
                     }
                 }
@@ -178,7 +139,8 @@ fun HomeScreen(
                         ListItem(
                             headlineContent = { Text(character.name) },
                             supportingContent = { Text("${character.role} | Lv.${character.age}") },
-                            leadingContent = { Icon(Icons.Default.Person, null) }
+                            leadingContent = { Icon(Icons.Default.Person, null) },
+                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowRight, null) }
                         )
                     }
                 }

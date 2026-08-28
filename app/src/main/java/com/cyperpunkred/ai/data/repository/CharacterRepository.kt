@@ -14,6 +14,8 @@ class CharacterRepository @Inject constructor(
 
     fun getCharacterById(id: Long): Flow<CharacterEntity?> = characterDao.getCharacterById(id)
 
+    suspend fun getCharacterByIdOnce(id: Long): CharacterEntity? = characterDao.getCharacterByIdOnce(id)
+
     suspend fun insertCharacter(character: CharacterEntity): Long = characterDao.insertCharacter(character)
 
     suspend fun updateCharacter(character: CharacterEntity) = characterDao.updateCharacter(character)
