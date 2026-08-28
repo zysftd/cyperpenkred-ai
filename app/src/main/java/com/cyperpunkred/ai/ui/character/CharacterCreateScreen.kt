@@ -336,14 +336,16 @@ private fun StatRow(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
+            // Fixed-width pill so the value "10" never wraps to two
+            // lines even at the maximum.  softWrap=false + maxLines=1
+            // are belt-and-suspenders for very dense font scales.
             Text(
-                text = value.toString(),
-                style = MaterialTheme.typography.titleLarge,
+                text = "$value / 10",
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .width(40.dp)
-                    .padding(horizontal = 8.dp),
+                maxLines = 1,
+                softWrap = false,
                 textAlign = androidx.compose.ui.text.style.TextAlign.End
             )
         }

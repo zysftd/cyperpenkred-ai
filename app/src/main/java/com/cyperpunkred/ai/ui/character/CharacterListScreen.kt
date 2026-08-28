@@ -95,9 +95,13 @@ fun CharacterListScreen(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("还没有角色", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "还没有角色",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onCreateCharacter) {
+                    Button(onClick = onCreateCharacter) {
                         Text("创建第一个角色")
                     }
                 }
@@ -133,32 +137,49 @@ private fun CharacterRow(
     onStart: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onView) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onView,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ListItem(
-                    headlineContent = { Text(character.name) },
-                    supportingContent = {
-                        Text(
-                            "${character.role} | HP: ${character.currentHP}/${character.maxHP} | SP ${character.armorSP}"
-                        )
-                    },
-                    leadingContent = { Icon(Icons.Default.Person, null) },
-                    modifier = Modifier.weight(1f)
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
                 )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = character.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${character.role} · HP ${character.currentHP}/${character.maxHP} · SP ${character.armorSP}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除角色")
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除角色",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.End
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onStart,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                FilledTonalButton(onClick = onStart) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("开始新游戏")
-                }
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("开始新游戏")
             }
         }
     }

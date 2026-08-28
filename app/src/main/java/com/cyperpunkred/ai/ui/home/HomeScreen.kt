@@ -134,13 +134,38 @@ fun HomeScreen(
                 items(characters, key = { "character-${it.id}" }) { character ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { onViewCharacter(character.id) }
+                        onClick = { onViewCharacter(character.id) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        )
                     ) {
                         ListItem(
-                            headlineContent = { Text(character.name) },
-                            supportingContent = { Text("${character.role} | Lv.${character.age}") },
-                            leadingContent = { Icon(Icons.Default.Person, null) },
-                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowRight, null) }
+                            headlineContent = {
+                                Text(
+                                    text = character.name,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = "${character.role} | Lv.${character.age}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         )
                     }
                 }
