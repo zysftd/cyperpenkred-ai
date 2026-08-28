@@ -32,15 +32,10 @@ class UserPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private object Keys {
-        val API_KEY = stringPreferencesKey("api_key")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val ACTIVE_PROVIDER_ID = stringPreferencesKey("active_provider_id")
         val DEFAULT_MODEL = stringPreferencesKey("default_model")
         val STRICT_JSON_MODE = stringPreferencesKey("strict_json_mode")
-    }
-
-    val apiKey: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[Keys.API_KEY] ?: ""
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
@@ -60,12 +55,6 @@ class UserPreferences @Inject constructor(
 
     val strictJsonMode: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[Keys.STRICT_JSON_MODE] == "true"
-    }
-
-    suspend fun saveApiKey(key: String) {
-        context.dataStore.edit { preferences ->
-            preferences[Keys.API_KEY] = key
-        }
     }
 
     suspend fun saveThemeMode(mode: ThemeMode) {

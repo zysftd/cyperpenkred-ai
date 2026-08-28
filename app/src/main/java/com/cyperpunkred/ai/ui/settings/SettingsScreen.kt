@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -48,9 +47,6 @@ class SettingsViewModel @Inject constructor(
     private val providerStore: ProviderStore,
     private val openAICompatibleClient: OpenAICompatibleClient
 ) : ViewModel() {
-    val apiKey = userPreferences.apiKey
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
-
     val themeMode = userPreferences.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DYNAMIC)
 
@@ -68,20 +64,6 @@ class SettingsViewModel @Inject constructor(
 
     private val _testStates = MutableStateFlow<Map<String, ProviderTestState>>(emptyMap())
     val testStates: StateFlow<Map<String, ProviderTestState>> = _testStates.asStateFlow()
-
-    init {
-        // Migrate old single API key to a real provider on first load.
-        viewModelScope.launch {
-            val legacy = userPreferences.apiKey.firstOrNull().orEmpty()
-            if (legacy.isNotBlank()) {
-                providerStore.seedFromLegacyApiKey(legacy)
-            }
-        }
-    }
-
-    fun saveApiKey(key: String) {
-        viewModelScope.launch { userPreferences.saveApiKey(key) }
-    }
 
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { userPreferences.saveThemeMode(mode) }
@@ -166,15 +148,12 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val apiKey by viewModel.apiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val providers by viewModel.providers.collectAsState()
     val active by viewModel.activeProvider.collectAsState()
     val defaultModel by viewModel.defaultModel.collectAsState()
     val strictJsonMode by viewModel.strictJsonMode.collectAsState()
     val testStates by viewModel.testStates.collectAsState()
-    var editingApiKey by remember { mutableStateOf(false) }
-    var tempApiKey by remember { mutableStateOf("") }
     var showProviderDialog by remember { mutableStateOf(false) }
     var editingProvider by remember { mutableStateOf<ProviderConfig?>(null) }
 
@@ -274,41 +253,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Legacy API key (still surfaced for users who haven't migrated)
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("旧版 OpenAI API Key（自动迁移）", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (editingApiKey) {
-                        OutlinedTextField(
-                            value = tempApiKey,
-                            onValueChange = { tempApiKey = it },
-                            label = { Text("API Key") },
-                            modifier = Modifier.fillMaxWidth(),
-                            visualTransformation = PasswordVisualTransformation()
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { editingApiKey = false }) { Text("取消") }
-                            Button(onClick = {
-                                viewModel.saveApiKey(tempApiKey)
-                                editingApiKey = false
-                            }) { Text("保存并迁移") }
-                        }
-                    } else {
-                        Text(
-                            text = if (apiKey.isNotBlank()) "已配置（首次启动将自动迁移到提供商列表）" else "未配置",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        TextButton(onClick = {
-                            tempApiKey = apiKey
-                            editingApiKey = true
-                        }) {
-                            Text(if (apiKey.isNotBlank()) "更新" else "设置 API Key")
-                        }
-                    }
-                }
-            }
-
             // Theme section
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -344,7 +288,6 @@ fun SettingsScreen(
     if (showProviderDialog) {
         ProviderEditorDialog(
             initial = editingProvider,
-            existingIds = providers.map { it.id },
             onDismiss = { showProviderDialog = false },
             onSave = { cfg ->
                 viewModel.upsertProvider(cfg)
@@ -451,7 +394,6 @@ private fun ProviderRow(
 @Composable
 private fun ProviderEditorDialog(
     initial: ProviderConfig?,
-    existingIds: List<String>,
     onDismiss: () -> Unit,
     onSave: (ProviderConfig) -> Unit
 ) {

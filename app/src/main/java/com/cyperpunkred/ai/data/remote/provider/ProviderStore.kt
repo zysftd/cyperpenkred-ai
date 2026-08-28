@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.cyperpunkred.ai.data.local.datastore.ProviderType
 import com.cyperpunkred.ai.data.local.datastore.UserPreferences
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -105,26 +104,6 @@ class ProviderStore @Inject constructor(
         val activeId = userPreferences.activeProviderId.firstOrNull()
         val all = readAll()
         return all.firstOrNull { it.id == activeId } ?: all.firstOrNull()
-    }
-
-    /**
-     * Seed an OpenAI provider with a previously-saved plain api key
-     * (from the old single-key UI). Only runs if no provider is
-     * configured yet, so the user can keep their existing key.
-     */
-    suspend fun seedFromLegacyApiKey(legacyKey: String) {
-        if (legacyKey.isBlank()) return
-        if (readAll().isNotEmpty()) return
-        val seed = ProviderConfig(
-            id = UUID.randomUUID().toString(),
-            name = "OpenAI",
-            type = ProviderType.OPENAI,
-            baseUrl = "https://api.openai.com/v1",
-            apiKey = legacyKey,
-            defaultModel = "gpt-4o-mini"
-        )
-        upsert(seed)
-        setActive(seed.id)
     }
 
     fun newId(): String = UUID.randomUUID().toString()
