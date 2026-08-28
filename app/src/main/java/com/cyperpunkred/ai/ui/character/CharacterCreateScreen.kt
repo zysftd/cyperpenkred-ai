@@ -296,30 +296,14 @@ fun StatsAssignmentStep(
         Text("总点数: $totalPoints/60")
 
         statFields.forEach { (abbr, name, value) ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("$abbr ($name)", modifier = Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    FilledIconButton(
-                        onClick = { if (value > 1) onStatChanged(abbr, value - 1) },
-                        enabled = value > 1
-                    ) { Icon(Icons.Default.Remove, null) }
-                    Text(
-                        "$value",
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    FilledIconButton(
-                        onClick = {
-                            if (value < 10 && totalPoints < 60) onStatChanged(abbr, value + 1)
-                        },
-                        enabled = value < 10 && totalPoints < 60
-                    ) { Icon(Icons.Default.Add, null) }
-                }
-            }
+            val remaining = 60 - (totalPoints - value)
+            StatRow(
+                abbr = abbr,
+                name = name,
+                value = value,
+                maxAllowed = minOf(10, remaining),
+                onStatChanged = onStatChanged
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -330,6 +314,61 @@ fun StatsAssignmentStep(
                 modifier = Modifier.weight(1f)
             ) { Text("下一步") }
         }
+    }
+}
+
+@Composable
+private fun StatRow(
+    abbr: String,
+    name: String,
+    value: Int,
+    maxAllowed: Int,
+    onStatChanged: (abbr: String, value: Int) -> Unit
+) {
+    var textValue by remember(value) { mutableStateOf(value.toString()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "$abbr ($name)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+                value = textValue,
+                onValueChange = { input ->
+                    val filtered = input.filter { it.isDigit() }.take(2)
+                    textValue = filtered
+                    val parsed = filtered.toIntOrNull()
+                    if (parsed != null && parsed in 1..maxAllowed) {
+                        onStatChanged(abbr, parsed)
+                    } else if (parsed != null && parsed in 1..10) {
+                        textValue = maxAllowed.toString()
+                        onStatChanged(abbr, maxAllowed)
+                    }
+                },
+                modifier = Modifier.width(64.dp),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.titleMedium,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                )
+            )
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { newVal ->
+                val intVal = newVal.toInt().coerceIn(1, maxAllowed)
+                onStatChanged(abbr, intVal)
+            },
+            valueRange = 1f..10f,
+            steps = 8,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
