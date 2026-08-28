@@ -5,6 +5,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import com.cyperpunkred.ai.data.local.datastore.ThemeMode
 
 private val DarkColorScheme = darkColorScheme(
     primary = NeonBlue,
@@ -38,17 +39,20 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun CyberpunkRedTheme(
+    themeMode: ThemeMode = ThemeMode.DYNAMIC,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colorScheme = when (themeMode) {
+        ThemeMode.DYNAMIC -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val context = LocalContext.current
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            } else {
+                if (darkTheme) DarkColorScheme else LightColorScheme
+            }
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        ThemeMode.RED -> if (darkTheme) DarkColorScheme else LightColorScheme
     }
 
     MaterialTheme(
