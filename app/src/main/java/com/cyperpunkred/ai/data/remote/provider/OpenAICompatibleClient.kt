@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,22 +57,23 @@ class OpenAICompatibleClient @Inject constructor(
     }
 
     /** Non-streaming chat completion. Throws on transport/HTTP errors. */
-    suspend fun chat(config: ProviderConfig, request: ChatRequest): ChatResponse {
-        val (cfg, client) = callFor(config)
-        val url = "${cfg.normalizedBaseUrl}/chat/completions"
-        val body = gson.toJson(request).toRequestBody("application/json".toMediaType())
-        val httpRequest = Request.Builder()
-            .url(url)
-            .post(body)
-            .build()
-        client.newCall(httpRequest).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code} from ${cfg.name}: ${text.take(400)}")
+    suspend fun chat(config: ProviderConfig, request: ChatRequest): ChatResponse =
+        withContext(Dispatchers.IO) {
+            val (cfg, client) = callFor(config)
+            val url = "${cfg.normalizedBaseUrl}/chat/completions"
+            val body = gson.toJson(request).toRequestBody("application/json".toMediaType())
+            val httpRequest = Request.Builder()
+                .url(url)
+                .post(body)
+                .build()
+            client.newCall(httpRequest).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IOException("HTTP ${response.code} from ${cfg.name}: ${text.take(400)}")
+                }
+                gson.fromJson(text, ChatResponse::class.java)
             }
-            return gson.fromJson(text, ChatResponse::class.java)
         }
-    }
 
     sealed interface StreamEvent {
         val text: String
@@ -186,7 +188,7 @@ class OpenAICompatibleClient @Inject constructor(
     }.flowOn(Dispatchers.IO)
 
     /** GET /v1/models for the model picker. */
-    suspend fun listModels(config: ProviderConfig): List<String> {
+    suspend fun listModels(config: ProviderConfig): List<String> = withContext(Dispatchers.IO) {
         val (cfg, client) = callFor(config)
         val url = "${cfg.normalizedBaseUrl}/models"
         val httpRequest = Request.Builder().url(url).get().build()
@@ -198,14 +200,14 @@ class OpenAICompatibleClient @Inject constructor(
             val parsed = runCatching {
                 gson.fromJson(text, ModelsResponse::class.java)
             }.getOrNull()
-            return parsed?.data?.map { it.id }.orEmpty().sorted()
+            parsed?.data?.map { it.id }.orEmpty().sorted()
         }
     }
 
     /** Test that a provider config is reachable: just lists models. */
-    suspend fun ping(config: ProviderConfig): String {
+    suspend fun ping(config: ProviderConfig): String = withContext(Dispatchers.IO) {
         val models = listModels(config)
-        return if (models.isEmpty()) "✅ 连接成功（但模型列表为空）"
+        if (models.isEmpty()) "✅ 连接成功（但模型列表为空）"
         else "✅ 连接成功，发现 ${models.size} 个模型：${models.take(5).joinToString(", ")}"
     }
 

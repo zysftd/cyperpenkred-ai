@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -69,7 +71,7 @@ class ProviderStore @Inject constructor(
         all.firstOrNull { it.id == activeId } ?: all.firstOrNull()
     }
 
-    suspend fun upsert(config: ProviderConfig) {
+    suspend fun upsert(config: ProviderConfig) = withContext(Dispatchers.IO) {
         val idList = currentIds().toMutableList()
         if (config.id !in idList) idList.add(config.id)
         encryptedPrefs.edit()
@@ -77,9 +79,10 @@ class ProviderStore @Inject constructor(
             .putString(Keys.provider(config.id), gson.toJson(config))
             .apply()
         changeTrigger.update { it + 1 }
+        Unit
     }
 
-    suspend fun delete(id: String) {
+    suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         val idList = currentIds().toMutableList()
         idList.remove(id)
         encryptedPrefs.edit()
@@ -92,18 +95,19 @@ class ProviderStore @Inject constructor(
             userPreferences.saveActiveProviderId(remaining.firstOrNull()?.id)
         }
         changeTrigger.update { it + 1 }
+        Unit
     }
 
     suspend fun setActive(id: String) {
         userPreferences.saveActiveProviderId(id)
     }
 
-    suspend fun readSnapshot(): List<ProviderConfig> = readAll()
+    suspend fun readSnapshot(): List<ProviderConfig> = withContext(Dispatchers.IO) { readAll() }
 
-    suspend fun activeSnapshot(): ProviderConfig? {
+    suspend fun activeSnapshot(): ProviderConfig? = withContext(Dispatchers.IO) {
         val activeId = userPreferences.activeProviderId.firstOrNull()
         val all = readAll()
-        return all.firstOrNull { it.id == activeId } ?: all.firstOrNull()
+        all.firstOrNull { it.id == activeId } ?: all.firstOrNull()
     }
 
     fun newId(): String = UUID.randomUUID().toString()
