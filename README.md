@@ -65,7 +65,7 @@
 |------|------|
 | 语言 | Kotlin（强类型、空安全、协程） |
 | UI | Jetpack Compose + Material3 |
-| 主题 | Dynamic Color (Android 12+) / 赛博朋克深色主题 |
+| 主题 | Dynamic Color (Android 12+) 
 | 依赖注入 | Hilt |
 | 网络 | Retrofit + OkHttp |
 | AI 后端 | OpenAI GPT-4 API |
