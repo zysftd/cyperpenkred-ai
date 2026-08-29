@@ -35,7 +35,30 @@ data class ProviderConfig(
      * Authorization header value. The default Bearer scheme works
      * for OpenAI, DeepSeek, Moonshot, OpenRouter, etc. – all of which
      * accept `Authorization: Bearer <key>`.
+     *
+     * The key is trimmed and any embedded newline / carriage return
+     * stripped, because pasting an API key from a text editor often
+     * drags a trailing "\n" along.  A literal newline makes the
+     * HTTP/2 header encoder throw
+     *   IllegalArgumentException: Unexpected char 0x0a in
+     *   Authorization value
+     * at request time (the "OkHttp Dispatcher" crash the user saw),
+     * so we guarantee the value only contains header-safe chars.
      */
     val authorizationHeader: String
-        get() = "Bearer $apiKey"
+        get() = "Bearer " + apiKey.sanitizeForHeader()
+
+    /** Header-safe representation: trim whitespace, drop \r\n and
+     *  any other C0 control characters. */
+    val cleanApiKey: String get() = apiKey.sanitizeForHeader()
+}
+
+/** Remove control chars (\n, \r, tab, etc.) and trim the result. */
+internal fun String.sanitizeForHeader(): String {
+    if (none { it.isISOControl() }) return trim()
+    return buildString {
+        for (ch in this@sanitizeForHeader) {
+            if (!ch.isISOControl()) append(ch)
+        }
+    }.trim()
 }

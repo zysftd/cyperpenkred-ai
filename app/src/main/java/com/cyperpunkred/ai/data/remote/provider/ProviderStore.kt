@@ -120,7 +120,9 @@ class ProviderStore @Inject constructor(
     private fun readAll(): List<ProviderConfig> = currentIds().mapNotNull { id ->
         runCatching {
             encryptedPrefs.getString(Keys.provider(id), null)?.let { json ->
-                gson.fromJson(json, ProviderConfig::class.java)
+                gson.fromJson(json, ProviderConfig::class.java)?.let { cfg ->
+                    cfg.copy(apiKey = cfg.apiKey.sanitizeForHeader())
+                }
             }
         }.getOrNull()
     }

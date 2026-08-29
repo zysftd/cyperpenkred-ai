@@ -575,7 +575,7 @@ private fun ProviderEditorDialog(
                 )
                 OutlinedTextField(
                     value = apiKey,
-                    onValueChange = { apiKey = it },
+                    onValueChange = { apiKey = it.filter { ch -> !ch.isISOControl() }.trim() },
                     label = { Text("API Key") },
                     singleLine = true,
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
