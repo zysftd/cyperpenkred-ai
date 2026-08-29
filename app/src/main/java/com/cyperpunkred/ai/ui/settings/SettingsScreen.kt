@@ -136,6 +136,39 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Fetch the model list for a not-yet-saved provider (called from
+     * the provider editor dialog while it is being filled in). Needs
+     * only the values currently in the form, so it can query the
+     * endpoint before the provider row exists.
+     */
+    suspend fun probeModels(baseUrl: String, apiKey: String, timeoutSeconds: Int): List<String> {
+        val stub = ProviderConfig(
+            id = "__probe__",
+            name = "probe",
+            type = ProviderType.CUSTOM,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            defaultModel = "",
+            timeoutSeconds = timeoutSeconds
+        )
+        return runCatching { openAICompatibleClient.listModels(stub) }.getOrDefault(emptyList())
+    }
+
+    suspend fun testConnection(baseUrl: String, apiKey: String, timeoutSeconds: Int): String {
+        val stub = ProviderConfig(
+            id = "__probe__",
+            name = "probe",
+            type = ProviderType.CUSTOM,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            defaultModel = "",
+            timeoutSeconds = timeoutSeconds
+        )
+        return runCatching { openAICompatibleClient.ping(stub) }
+            .getOrElse { "❌ ${it.message ?: "连接失败"}" }
+    }
+
     private fun updateTest(id: String, block: (ProviderTestState) -> ProviderTestState) {
         val current = _testStates.value.toMutableMap()
         current[id] = block(current[id] ?: ProviderTestState())
@@ -219,14 +252,44 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("生成设置", style = MaterialTheme.typography.titleMedium)
                     val dm = defaultModel.orEmpty()
-                    OutlinedTextField(
-                        value = dm,
-                        onValueChange = { viewModel.saveDefaultModel(it) },
-                        label = { Text("默认模型（覆盖提供商默认）") },
-                        placeholder = { Text(active?.defaultModel.orEmpty()) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    val activeModelCandidates = active?.let { testStates[it.id]?.models } ?: emptyList()
+                    var modelMenuExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = modelMenuExpanded,
+                        onExpandedChange = { modelMenuExpanded = !modelMenuExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = dm,
+                            onValueChange = { viewModel.saveDefaultModel(it) },
+                            label = { Text("默认模型（覆盖提供商默认）") },
+                            placeholder = { Text(active?.defaultModel.orEmpty()) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = true)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelMenuExpanded,
+                            onDismissRequest = { modelMenuExpanded = false }
+                        ) {
+                            if (activeModelCandidates.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("暂无可用模型，请先在提供商卡片里「刷新模型」") },
+                                    onClick = { modelMenuExpanded = false }
+                                )
+                            } else {
+                                activeModelCandidates.forEach { modelId ->
+                                    DropdownMenuItem(
+                                        text = { Text(modelId) },
+                                        onClick = {
+                                            viewModel.saveDefaultModel(modelId)
+                                            modelMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                     HorizontalDivider()
                     Row(
                         modifier = Modifier
@@ -292,7 +355,9 @@ fun SettingsScreen(
             onSave = { cfg ->
                 viewModel.upsertProvider(cfg)
                 showProviderDialog = false
-            }
+            },
+            probeModels = viewModel::probeModels,
+            testConnection = viewModel::testConnection
         )
     }
 }
@@ -395,7 +460,9 @@ private fun ProviderRow(
 private fun ProviderEditorDialog(
     initial: ProviderConfig?,
     onDismiss: () -> Unit,
-    onSave: (ProviderConfig) -> Unit
+    onSave: (ProviderConfig) -> Unit,
+    probeModels: suspend (baseUrl: String, apiKey: String, timeoutSeconds: Int) -> List<String>,
+    testConnection: suspend (baseUrl: String, apiKey: String, timeoutSeconds: Int) -> String
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var type by remember { mutableStateOf(initial?.type ?: ProviderType.CUSTOM) }
@@ -407,12 +474,50 @@ private fun ProviderEditorDialog(
     var supportsStream by remember { mutableStateOf(initial?.supportsStream ?: true) }
     var showKey by remember { mutableStateOf(false) }
     var typeMenuExpanded by remember { mutableStateOf(false) }
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+    var fetchedModels by remember { mutableStateOf<List<String>>(emptyList()) }
+    var testing by remember { mutableStateOf(false) }
+    var testMessage by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+    val currentTimeout = timeout.toIntOrNull()?.coerceIn(5, 600) ?: 60
+    val canProbe = baseUrl.isNotBlank() && apiKey.isNotBlank()
+
+    fun refreshModels() {
+        if (!canProbe) return
+        scope.launch {
+            testing = true
+            testMessage = null
+            val models = probeModels(baseUrl.trim(), apiKey.trim(), currentTimeout)
+            fetchedModels = models
+            // Auto-pick the newest model if none is selected yet,
+            // and always include the currently-typed value so it
+            // isn't dropped.
+            if (defaultModel.isBlank() && models.isNotEmpty()) defaultModel = models.first()
+            testing = false
+            testMessage = if (models.isEmpty()) "❌ 未获取到模型（请检查 Base URL / API Key）"
+            else "✅ 获取到 ${models.size} 个模型"
+        }
+    }
+
+    fun testNow() {
+        if (!canProbe) return
+        scope.launch {
+            testing = true
+            testMessage = null
+            testMessage = testConnection(baseUrl.trim(), apiKey.trim(), currentTimeout)
+            testing = false
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "新增提供商" else "编辑提供商") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -484,14 +589,68 @@ private fun ProviderEditorDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = defaultModel,
-                    onValueChange = { defaultModel = it },
-                    label = { Text("默认模型") },
-                    placeholder = { Text("gpt-4o-mini") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = ::testNow, enabled = canProbe && !testing) {
+                        if (testing) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                        } else {
+                            Text("测试连接")
+                        }
+                    }
+                    OutlinedButton(onClick = ::refreshModels, enabled = canProbe && !testing) {
+                        Text("刷新模型列表")
+                    }
+                }
+                testMessage?.let { msg ->
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (msg.startsWith("❌")) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Editable dropdown: pick from fetched models OR type
+                // a custom id manually.
+                ExposedDropdownMenuBox(
+                    expanded = modelMenuExpanded,
+                    onExpandedChange = { modelMenuExpanded = !modelMenuExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = defaultModel,
+                        onValueChange = { defaultModel = it },
+                        readOnly = false,
+                        label = { Text("默认模型") },
+                        placeholder = { Text("gpt-4o-mini") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = true)
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = modelMenuExpanded,
+                        onDismissRequest = { modelMenuExpanded = false }
+                    ) {
+                        if (fetchedModels.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("点击「刷新模型列表」获取可选模型") },
+                                onClick = { modelMenuExpanded = false }
+                            )
+                        } else {
+                            fetchedModels.forEach { modelId ->
+                                DropdownMenuItem(
+                                    text = { Text(modelId) },
+                                    onClick = {
+                                        defaultModel = modelId
+                                        modelMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = timeout,
                     onValueChange = { timeout = it.filter { c -> c.isDigit() } },
