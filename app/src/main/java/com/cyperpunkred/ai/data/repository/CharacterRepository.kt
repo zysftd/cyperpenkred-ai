@@ -21,4 +21,12 @@ class CharacterRepository @Inject constructor(
     suspend fun updateCharacter(character: CharacterEntity) = characterDao.updateCharacter(character)
 
     suspend fun deleteCharacter(id: Long) = characterDao.deleteCharacter(id)
+
+    /**
+     * Returns how many sessions (active, completed, or paused) are
+     * bound to [characterId].  Used by the delete-character UI to
+     * decide whether to show a soft warning or a hard block.
+     */
+    suspend fun getSessionCountForCharacter(characterId: Long): Int =
+        characterDao.getSessionCountForCharacter(characterId)
 }

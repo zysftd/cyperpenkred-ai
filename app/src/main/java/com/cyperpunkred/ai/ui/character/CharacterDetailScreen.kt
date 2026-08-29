@@ -46,11 +46,9 @@ class CharacterDetailViewModel @Inject constructor(
      */
     fun startGame(onResult: (Long?) -> Unit) {
         viewModelScope.launch {
-            val r = sessionRepository.startSession(characterId)
             onResult(
-                when (r) {
+                when (val r = sessionRepository.startSession(characterId)) {
                     is StartSessionResult.Created -> r.sessionId
-                    is StartSessionResult.ExistingActive -> r.sessionId
                     StartSessionResult.NoSuchCharacter -> null
                 }
             )

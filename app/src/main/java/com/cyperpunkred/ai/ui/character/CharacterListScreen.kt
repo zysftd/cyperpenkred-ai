@@ -31,6 +31,18 @@ class CharacterListViewModel @Inject constructor(
     val characters = characterRepository.getAllCharacters()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * Returns the number of game sessions still bound to
+     * [characterId] via [onResult].  The UI shows the count in the
+     * delete-character confirmation dialog so the user knows what
+     * else will be swept away.
+     */
+    fun getSessionCountFor(characterId: Long, onResult: (Int) -> Unit) {
+        viewModelScope.launch {
+            onResult(characterRepository.getSessionCountForCharacter(characterId))
+        }
+    }
+
     fun deleteCharacter(id: Long) {
         viewModelScope.launch {
             characterRepository.deleteCharacter(id)
@@ -46,7 +58,6 @@ class CharacterListViewModel @Inject constructor(
         viewModelScope.launch {
             when (val r = sessionRepository.startSession(characterId)) {
                 is StartSessionResult.Created -> onResult(r.sessionId)
-                is StartSessionResult.ExistingActive -> onResult(r.sessionId)
                 StartSessionResult.NoSuchCharacter -> onResult(null)
             }
         }
@@ -64,6 +75,8 @@ fun CharacterListScreen(
     val characters by viewModel.characters.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<CharacterEntity?>(null) }
+    var pendingDeleteSessionCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(errorMessage) {
         val msg = errorMessage ?: return@LaunchedEffect
@@ -122,11 +135,57 @@ fun CharacterListScreen(
                                 else errorMessage = "无法开始游戏：角色不存在"
                             }
                         },
-                        onDelete = { viewModel.deleteCharacter(character.id) }
+                        onDelete = {
+                            pendingDelete = character
+                            viewModel.getSessionCountFor(character.id) { count ->
+                                pendingDeleteSessionCount = count
+                            }
+                        }
                     )
                 }
             }
         }
+    }
+
+    pendingDelete?.let { character ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除角色？") },
+            text = {
+                Column {
+                    Text("将永久删除角色卡《${character.name}》。")
+                    if (pendingDeleteSessionCount > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "该角色还有 ${pendingDeleteSessionCount} 场游戏，删除角色也会一起删除这些游戏及其全部对话记录和战斗日志。",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "此操作不可撤销。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteCharacter(character.id)
+                        pendingDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            }
+        )
     }
 }
 

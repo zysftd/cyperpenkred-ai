@@ -143,3 +143,53 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         }
     }
 }
+
+/**
+ * v3 -> v4: relax the session -> character FK from CASCADE to
+ * RESTRICT.
+ *
+ * The character sheet is now meant to be a free-standing card that
+ * the user can reuse across multiple adventures.  With CASCADE,
+ * deleting a character would silently take all of its sessions
+ * (and their chat / combat history) with it -- the exact opposite
+ * of the "角色卡是自由的" design.  RESTRICT means a character can
+ * only be deleted after its sessions are deleted explicitly, which
+ * is the right confirmation boundary for the UI to enforce.
+ *
+ * Rebuilding `game_sessions` is the only portable way to change a
+ * FK's onDelete action; SQLite has no ALTER TABLE ... DROP
+ * CONSTRAINT.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.beginTransaction()
+        try {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `game_sessions_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `characterId` INTEGER NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`characterId`) REFERENCES `characters`(`id`) ON UPDATE CASCADE ON DELETE RESTRICT
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO game_sessions_new (id, characterId, title, status, createdAt, updatedAt)
+                SELECT id, characterId, title, status, createdAt, updatedAt FROM game_sessions
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE game_sessions")
+            db.execSQL("ALTER TABLE game_sessions_new RENAME TO game_sessions")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_game_sessions_characterId` ON `game_sessions` (`characterId`)")
+
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+}

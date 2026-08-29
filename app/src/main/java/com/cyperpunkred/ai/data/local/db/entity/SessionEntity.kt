@@ -12,7 +12,7 @@ import androidx.room.PrimaryKey
             entity = CharacterEntity::class,
             parentColumns = ["id"],
             childColumns = ["characterId"],
-            onDelete = ForeignKey.CASCADE,
+            onDelete = ForeignKey.RESTRICT,
             onUpdate = ForeignKey.CASCADE
         )
     ],

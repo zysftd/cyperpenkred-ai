@@ -26,4 +26,7 @@ interface CharacterDao {
 
     @Query("SELECT COUNT(*) FROM characters")
     suspend fun getCharacterCount(): Int
+
+    @Query("SELECT COUNT(*) FROM game_sessions WHERE characterId = :characterId")
+    suspend fun getSessionCountForCharacter(characterId: Long): Int
 }

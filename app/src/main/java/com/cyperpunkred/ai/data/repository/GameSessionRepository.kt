@@ -11,17 +11,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Outcome of trying to start a new game for a character. Strong
- * binding between character and session is enforced here:
- *   - [NoSuchCharacter]    the character id doesn't exist
- *   - [ExistingActive]     the character already has an active
- *                          session; reuse it rather than start a
- *                          parallel adventure
- *   - [Created]            a brand-new session row was inserted
+ * Outcome of trying to start a new game for a character. The
+ * character card is a free-standing object -- the same character
+ * can be played across any number of sessions.  This type only
+ * reports whether the row was created or the supplied characterId
+ * was bogus.
  */
 sealed interface StartSessionResult {
     data class Created(val sessionId: Long) : StartSessionResult
-    data class ExistingActive(val sessionId: Long) : StartSessionResult
     object NoSuchCharacter : StartSessionResult
 }
 
@@ -40,14 +37,11 @@ class GameSessionRepository @Inject constructor(
     suspend fun getSessionByIdOnce(id: Long): SessionEntity? = sessionDao.getSessionByIdOnce(id)
 
     /**
-     * Start a new game bound to [characterId]. Returns
-     * [StartSessionResult.ExistingActive] if that character already
-     * has an in-progress adventure so the caller can resume it
-     * instead of opening a duplicate.
+     * Start a new game bound to [characterId]. The same character
+     * may be the parent of any number of sessions; this always
+     * inserts a fresh row.
      */
     suspend fun startSession(characterId: Long): StartSessionResult {
-        val existing = sessionDao.getActiveSessionForCharacter(characterId)
-        if (existing != null) return StartSessionResult.ExistingActive(existing.id)
         val now = System.currentTimeMillis()
         val id = sessionDao.insertSession(
             SessionEntity(

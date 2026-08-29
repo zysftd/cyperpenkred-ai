@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.cyperpunkred.ai.data.local.db.entity.SessionEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -21,6 +20,7 @@ fun GameListScreen(
     viewModel: GameListViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.recentSessions.collectAsState()
+    var pendingDelete by remember { mutableStateOf<SessionSummary?>(null) }
 
     Scaffold(
         topBar = {
@@ -43,15 +43,51 @@ fun GameListScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(sessions, key = { it.id }) { session ->
+                items(sessions, key = { it.session.id }) { summary ->
                     SessionCard(
-                        session = session,
-                        onClick = { onSessionClick(session.id) },
-                        onDelete = { viewModel.deleteSession(session.id) }
+                        summary = summary,
+                        onClick = { onSessionClick(summary.session.id) },
+                        onDelete = { pendingDelete = summary }
                     )
                 }
             }
         }
+    }
+
+    pendingDelete?.let { summary ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除游戏？") },
+            text = {
+                Column {
+                    Text("将永久删除这场冒险，包括全部对话记录和战斗日志。")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "游戏：${summary.session.title}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "角色：${summary.characterName}（不会被删除，可继续用于其他游戏）",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteSession(summary.session.id)
+                        pendingDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -83,7 +119,7 @@ private fun EmptyState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
-            FilledTonalButton(onClick = onPickCharacter) {
+            Button(onClick = onPickCharacter) {
                 Text("选择角色开始")
             }
         }
@@ -92,29 +128,50 @@ private fun EmptyState(
 
 @Composable
 private fun SessionCard(
-    session: SessionEntity,
+    summary: SessionSummary,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
     ) {
         ListItem(
-            headlineContent = { Text(session.title) },
+            headlineContent = {
+                Text(
+                    text = summary.session.title,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
             supportingContent = {
-                val statusLabel = when (session.status) {
+                val statusLabel = when (summary.session.status) {
                     "active" -> "进行中"
                     "completed" -> "已完成"
                     "paused" -> "暂停"
-                    else -> session.status
+                    else -> summary.session.status
                 }
-                Text("状态: $statusLabel")
+                Text(
+                    text = "$statusLabel · 角色：${summary.characterName}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
-            leadingContent = { Icon(Icons.Default.PlayArrow, null) },
+            leadingContent = {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
             trailingContent = {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除")
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除游戏",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         )
