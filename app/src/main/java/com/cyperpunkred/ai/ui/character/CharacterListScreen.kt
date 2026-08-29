@@ -64,6 +64,21 @@ class CharacterListViewModel @Inject constructor(
     }
 }
 
+/**
+ * UI-only state for the delete-character confirmation dialog.
+ *
+ * Bundling the character and its session count into a single
+ * nullable state means a count callback for character A can never
+ * be paired with a pendingDelete of character B (the race that
+ * the previous (pendingDelete: CharacterEntity?, count: Int) pair
+ * had), and the dialog only ever renders after both pieces of
+ * data have arrived.
+ */
+private data class PendingDelete(
+    val character: CharacterEntity,
+    val sessionCount: Int
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterListScreen(
@@ -75,8 +90,7 @@ fun CharacterListScreen(
     val characters by viewModel.characters.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var pendingDelete by remember { mutableStateOf<CharacterEntity?>(null) }
-    var pendingDeleteSessionCount by remember { mutableStateOf(0) }
+    var pendingDelete by remember { mutableStateOf<PendingDelete?>(null) }
 
     LaunchedEffect(errorMessage) {
         val msg = errorMessage ?: return@LaunchedEffect
@@ -136,9 +150,26 @@ fun CharacterListScreen(
                             }
                         },
                         onDelete = {
-                            pendingDelete = character
-                            viewModel.getSessionCountFor(character.id) { count ->
-                                pendingDeleteSessionCount = count
+                            // Cancel any in-flight query for a
+                            // different character by overwriting
+                            // the pending state.  The callback will
+                            // only commit if `pendingDelete` is
+                            // still null at the time it runs (the
+                            // user hasn't switched focus to another
+                            // character or dismissed the dialog).
+                            pendingDelete = null
+                            val target = character
+                            viewModel.getSessionCountFor(target.id) { count ->
+                                // Race guard: if the user tapped
+                                // another character's delete in
+                                // the meantime, or dismissed the
+                                // dialog, `pendingDelete` is no
+                                // longer null-or-this-character, so
+                                // we drop this stale result.
+                                val current = pendingDelete
+                                if (current == null || current.character.id != target.id) {
+                                    pendingDelete = PendingDelete(target, count)
+                                }
                             }
                         }
                     )
@@ -147,17 +178,18 @@ fun CharacterListScreen(
         }
     }
 
-    pendingDelete?.let { character ->
+    val delete = pendingDelete
+    if (delete != null) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除角色？") },
             text = {
                 Column {
-                    Text("将永久删除角色卡《${character.name}》。")
-                    if (pendingDeleteSessionCount > 0) {
+                    Text("将永久删除角色卡《${delete.character.name}》。")
+                    if (delete.sessionCount > 0) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "该角色还有 ${pendingDeleteSessionCount} 场游戏，删除角色也会一起删除这些游戏及其全部对话记录和战斗日志。",
+                            "该角色还有 ${delete.sessionCount} 场游戏，删除角色也会一起删除这些游戏及其全部对话记录和战斗日志。",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -174,7 +206,7 @@ fun CharacterListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteCharacter(character.id)
+                        viewModel.deleteCharacter(delete.character.id)
                         pendingDelete = null
                     },
                     colors = ButtonDefaults.textButtonColors(
